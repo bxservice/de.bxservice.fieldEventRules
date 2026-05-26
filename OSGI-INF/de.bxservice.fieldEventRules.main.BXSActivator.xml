@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.3.0" immediate="true" name="de.bxservice.fieldEventRules.main.BXSActivator">
+   <reference cardinality="1..1" field="mappedModelFactory" interface="org.idempiere.model.IMappedModelFactory" name="mappedModelFactory"/>
+   <implementation class="de.bxservice.fieldEventRules.main.BXSActivator"/>
+</scr:component>

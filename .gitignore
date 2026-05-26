@@ -1,0 +1,14 @@
+# Build output
+/bin/
+
+# Eclipse project files
+.classpath
+.project
+.settings/
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
