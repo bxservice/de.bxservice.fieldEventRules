@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.3.0" deactivate="deactivate" immediate="true" name="de.bxservice.fieldEventRules.callout.FieldEventRuleCalloutRegister">
+   <reference cardinality="1..1" field="mappedCalloutFactory" interface="org.adempiere.base.IMappedColumnCalloutFactory" name="mappedCalloutFactory"/>
+   <implementation class="de.bxservice.fieldEventRules.callout.FieldEventRuleCalloutRegister"/>
+</scr:component>

@@ -105,6 +105,15 @@ public interface I_BXS_FieldEventAction
 	/** Get Action Type	  */
 	public String getBXS_ActionType();
 
+    /** Column name BXS_FieldEventAction_ID */
+    public static final String COLUMNNAME_BXS_FieldEventAction_ID = "BXS_FieldEventAction_ID";
+
+	/** Set Field Event Action	  */
+	public void setBXS_FieldEventAction_ID (int BXS_FieldEventAction_ID);
+
+	/** Get Field Event Action	  */
+	public int getBXS_FieldEventAction_ID();
+
     /** Column name BXS_FieldEventAction_UU */
     public static final String COLUMNNAME_BXS_FieldEventAction_UU = "BXS_FieldEventAction_UU";
 

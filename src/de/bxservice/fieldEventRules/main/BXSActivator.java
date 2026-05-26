@@ -1,4 +1,4 @@
-/***********************************************************************
+/**********************************************************************
  * This file is part of iDempiere ERP Open Source                      *
  * http://www.idempiere.org                                            *
  *                                                                     *
@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,          *
  * MA 02110-1301, USA.                                                 *
  *                                                                     *
+ * Contributors:                                                       *
+ * - Diego Ruiz - BX Service GmbH                                      *
  **********************************************************************/
 package de.bxservice.fieldEventRules.main;
 
@@ -30,11 +32,6 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 
-/**
- * Activator for org.idempiere.acct bundle.
- * 
- * @author etantg / d-ruiz
- */
 @Component(immediate = true)
 public class BXSActivator extends Incremental2PackActivator {
 

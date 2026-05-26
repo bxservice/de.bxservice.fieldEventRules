@@ -41,6 +41,7 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
         {
 			setAD_Column_ID (0);
 			setBXS_ActionType (null);
+			setBXS_FieldEventAction_ID (0);
 			setBXS_FieldEventRule_ID (0);
         } */
     }
@@ -53,6 +54,7 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
         {
 			setAD_Column_ID (0);
 			setBXS_ActionType (null);
+			setBXS_FieldEventAction_ID (0);
 			setBXS_FieldEventRule_ID (0);
         } */
     }
@@ -65,6 +67,7 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
         {
 			setAD_Column_ID (0);
 			setBXS_ActionType (null);
+			setBXS_FieldEventAction_ID (0);
 			setBXS_FieldEventRule_ID (0);
         } */
     }
@@ -77,6 +80,7 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
         {
 			setAD_Column_ID (0);
 			setBXS_ActionType (null);
+			setBXS_FieldEventAction_ID (0);
 			setBXS_FieldEventRule_ID (0);
         } */
     }
@@ -173,8 +177,6 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
 	public static final String BXS_ACTIONTYPE_CLEAR = "C";
 	/** SET = S */
 	public static final String BXS_ACTIONTYPE_SET = "S";
-	/** VALIDATE = V */
-	public static final String BXS_ACTIONTYPE_VALIDATE = "V";
 	/** Set Action Type.
 		@param BXS_ActionType Action Type
 	*/
@@ -189,6 +191,27 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
 	public String getBXS_ActionType()
 	{
 		return (String)get_Value(COLUMNNAME_BXS_ActionType);
+	}
+
+	/** Set Field Event Action.
+		@param BXS_FieldEventAction_ID Field Event Action
+	*/
+	public void setBXS_FieldEventAction_ID (int BXS_FieldEventAction_ID)
+	{
+		if (BXS_FieldEventAction_ID < 1)
+			set_ValueNoCheck (COLUMNNAME_BXS_FieldEventAction_ID, null);
+		else
+			set_ValueNoCheck (COLUMNNAME_BXS_FieldEventAction_ID, Integer.valueOf(BXS_FieldEventAction_ID));
+	}
+
+	/** Get Field Event Action.
+		@return Field Event Action	  */
+	public int getBXS_FieldEventAction_ID()
+	{
+		Integer ii = (Integer)get_Value(COLUMNNAME_BXS_FieldEventAction_ID);
+		if (ii == null)
+			 return 0;
+		return ii.intValue();
 	}
 
 	/** Set BXS_FieldEventAction_UU.
