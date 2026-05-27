@@ -7,7 +7,7 @@
  * This program is free software; you can redistribute it and/or       *
  * modify it under the terms of the GNU General Public License         *
  * as published by the Free Software Foundation; either version 2      *
- * of the License, or (at your option) any later version.              *
+ * of the License, or (at your option) any later version.             *
  *                                                                     *
  * This program is distributed in the hope that it will be useful,     *
  * but WITHOUT ANY WARRANTY; without even the implied warranty of      *
@@ -29,9 +29,9 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.compiere.model.Query;
+import org.compiere.util.CCache;
 import org.compiere.util.CLogger;
 import org.compiere.util.DB;
 import org.compiere.util.Env;
@@ -41,10 +41,6 @@ import de.bxservice.fieldEventRules.model.MBXSFieldEventRule;
 import de.bxservice.fieldEventRules.model.X_BXS_FieldEventAction;
 import de.bxservice.fieldEventRules.model.X_BXS_FieldEventRule;
 
-/**
- * Singleton cache for {@link MBXSFieldEventRule} and {@link MBXSFieldEventAction} lookups.
- * Call {@link #invalidate()} whenever rules or actions are saved or deleted.
- */
 public class FieldEventRuleCache {
 
 	private static final CLogger log = CLogger.getCLogger(FieldEventRuleCache.class);
@@ -62,10 +58,14 @@ public class FieldEventRuleCache {
 			+ "   AND r.TriggerEvent IN ('S', 'B')"
 			+ " ORDER BY r.SeqNo";
 
-	private final ConcurrentHashMap<Integer, List<MBXSFieldEventRule>> rulesByFieldId    = new ConcurrentHashMap<>();
-	private final ConcurrentHashMap<Integer, List<MBXSFieldEventRule>> rulesByColumnId   = new ConcurrentHashMap<>();
-	private final ConcurrentHashMap<String,  List<Integer>>            columnIdsByTable   = new ConcurrentHashMap<>();
-	private final ConcurrentHashMap<Integer, List<MBXSFieldEventAction>> actionsByRuleId = new ConcurrentHashMap<>();
+	private static final CCache<Integer, List<MBXSFieldEventRule>> rulesByFieldId =
+			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleByField", 30, 0, false, 500);
+	private static final CCache<Integer, List<MBXSFieldEventRule>> rulesByColumnId =
+			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleByColumn", 30, 0, false, 500);
+	private static final CCache<String, List<Integer>> columnIdsByTable =
+			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleColumnsByTable", 30, 0, false, 500);
+	private static final CCache<Integer, List<MBXSFieldEventAction>> actionsByRuleId =
+			new CCache<>(MBXSFieldEventAction.Table_Name, "BXS_FieldEventActionByRule", 30, 0, false, 500);
 
 	private FieldEventRuleCache() {}
 
@@ -74,26 +74,46 @@ public class FieldEventRuleCache {
 	}
 
 	public List<MBXSFieldEventRule> getRulesByFieldId(int adFieldId) {
-		return rulesByFieldId.computeIfAbsent(adFieldId, FieldEventRuleCache::loadRulesByFieldId);
+		List<MBXSFieldEventRule> list = rulesByFieldId.get(adFieldId);
+		if (list != null)
+			return list;
+		list = loadRulesByFieldId(adFieldId);
+		rulesByFieldId.put(adFieldId, list);
+		return list;
 	}
 
 	public List<MBXSFieldEventRule> getRulesByColumnId(int adColumnId) {
-		return rulesByColumnId.computeIfAbsent(adColumnId, FieldEventRuleCache::loadRulesByColumnId);
+		List<MBXSFieldEventRule> list = rulesByColumnId.get(adColumnId);
+		if (list != null)
+			return list;
+		list = loadRulesByColumnId(adColumnId);
+		rulesByColumnId.put(adColumnId, list);
+		return list;
 	}
 
 	public List<Integer> getColumnIdsByTableName(String tableName) {
-		return columnIdsByTable.computeIfAbsent(tableName, FieldEventRuleCache::loadColumnIdsByTable);
+		List<Integer> ids = columnIdsByTable.get(tableName);
+		if (ids != null)
+			return ids;
+		ids = loadColumnIdsByTable(tableName);
+		columnIdsByTable.put(tableName, ids);
+		return ids;
 	}
 
 	public List<MBXSFieldEventAction> getActionsByRuleId(int ruleId) {
-		return actionsByRuleId.computeIfAbsent(ruleId, FieldEventRuleCache::loadActionsByRuleId);
+		List<MBXSFieldEventAction> list = actionsByRuleId.get(ruleId);
+		if (list != null)
+			return list;
+		list = loadActionsByRuleId(ruleId);
+		actionsByRuleId.put(ruleId, list);
+		return list;
 	}
 
 	public void invalidate() {
-		rulesByFieldId.clear();
-		rulesByColumnId.clear();
-		columnIdsByTable.clear();
-		actionsByRuleId.clear();
+		rulesByFieldId.reset();
+		rulesByColumnId.reset();
+		columnIdsByTable.reset();
+		actionsByRuleId.reset();
 		log.fine("FieldEventRuleCache invalidated");
 	}
 
