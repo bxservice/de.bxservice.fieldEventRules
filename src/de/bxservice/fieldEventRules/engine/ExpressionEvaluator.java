@@ -83,8 +83,17 @@ public class ExpressionEvaluator {
 			String sql = substituted.substring(SQL_PREFIX.length());
 			assertSafeSql(sql);
 			try {
-				List<Object> rows = DB.getSQLValueObjectsEx(null, sql);
-				return (rows != null && !rows.isEmpty()) ? rows.get(0) : null;
+				List<List<Object>> rows = DB.getSQLArrayObjectsEx(null, sql);
+				if (rows == null || rows.isEmpty())
+					return null;
+				if (rows.size() > 1)
+					throw new AdempiereException(
+							"SQL expression for assignment returned " + rows.size()
+							+ " rows; must return exactly one: " + sql);
+				List<Object> firstRow = rows.get(0);
+				return (firstRow != null && !firstRow.isEmpty()) ? firstRow.get(0) : null;
+			} catch (AdempiereException e) {
+				throw e;
 			} catch (Exception e) {
 				throw new AdempiereException(
 						"SQL expression execution failed [" + sql + "]", e);

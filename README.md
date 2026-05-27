@@ -100,7 +100,7 @@ Starts with `@SQL=` followed by a SQL fragment. The fragment is evaluated as a c
 
 ```
 @SQL=@GrandTotal@ > (
-    SELECT CreditLimit
+    SELECT SO_CreditLimit
     FROM   C_BPartner
     WHERE  C_BPartner_ID = @C_BPartner_ID@
 )
@@ -244,7 +244,7 @@ Action:
 | Field | Value |
 |---|---|
 | Type | VALIDATE |
-| Expression | `SELECT CASE WHEN @GrandTotal@ <= CreditLimit THEN 'Y' ELSE 'N' END FROM C_BPartner WHERE C_BPartner_ID = @C_BPartner_ID@` |
+| Expression | `SELECT CASE WHEN @GrandTotal@ <= SO_CreditLimit THEN 'Y' ELSE 'N' END FROM C_BPartner WHERE C_BPartner_ID = @C_BPartner_ID@` |
 | Message | Invoice amount exceeds the credit limit for this Business Partner. Please review before proceeding. |
 
 ---

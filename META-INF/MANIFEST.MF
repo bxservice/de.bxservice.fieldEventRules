@@ -5,8 +5,8 @@ Bundle-SymbolicName: de.bxservice.fieldEventRules;singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Import-Package: org.osgi.framework;version="1.10.0",
  org.osgi.service.event;version="[1.4.0,2.0.0)"
-Require-Bundle: org.adempiere.base;bundle-version="13.0.0",
- org.adempiere.plugin.utils;bundle-version="13.0.0",
+Require-Bundle: org.adempiere.base;bundle-version="12.0.0",
+ org.adempiere.plugin.utils;bundle-version="12.0.0",
  org.osgi.service.component.annotations;bundle-version="1.5.1"
 Service-Component: OSGI-INF/de.bxservice.fieldEventRules.callout.FieldEventRuleCalloutRegister.xml,
  OSGI-INF/de.bxservice.fieldEventRules.main.BXSActivator.xml,

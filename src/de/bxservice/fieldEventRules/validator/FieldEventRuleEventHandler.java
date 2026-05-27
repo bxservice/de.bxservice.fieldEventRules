@@ -36,7 +36,10 @@ import org.adempiere.base.event.AbstractEventHandler;
 import org.adempiere.base.event.IEventManager;
 import org.adempiere.base.event.IEventTopics;
 import org.adempiere.exceptions.AdempiereException;
+import org.compiere.Adempiere;
 import org.compiere.model.PO;
+import org.compiere.model.ServerStateChangeEvent;
+import org.compiere.model.ServerStateChangeListener;
 import org.compiere.util.CLogger;
 import org.compiere.util.DB;
 import org.osgi.service.component.annotations.Component;
@@ -76,6 +79,17 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 
 	@Override
 	protected void initialize() {
+		if (!Adempiere.isStarted()) {
+			Adempiere.addServerStateChangeListener(new ServerStateChangeListener() {
+				@Override
+				public void stateChange(ServerStateChangeEvent event) {
+					if (event.getEventType() == ServerStateChangeEvent.SERVER_START && Adempiere.isStarted())
+							initialize();
+				}
+			});
+			return;
+		}
+		
 		int count = 0;
 		try (PreparedStatement pstmt = DB.prepareStatement(SQL_TABLE_NAMES, null);
 				ResultSet rs = pstmt.executeQuery()) {

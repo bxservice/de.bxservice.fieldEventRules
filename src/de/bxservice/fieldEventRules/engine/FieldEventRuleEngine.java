@@ -140,25 +140,10 @@ public class FieldEventRuleEngine {
 		return "Y".equals(String.valueOf(result));
 	}
 
-	private void applyAction(
-			MBXSFieldEventAction action,
-			MBXSFieldEventRule rule,
-			EvaluationContext ctx,
-			FieldEventResult.Builder result) {
+	private void applyAction(MBXSFieldEventAction action, MBXSFieldEventRule rule,
+			EvaluationContext ctx, FieldEventResult.Builder result) {
 
-		String colName;
-		try {
-			colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
-		} catch (Exception e) {
-			log.warning("Rule '" + rule.getName() + "' action " + action.getSeqNo()
-					+ ": cannot resolve column for AD_Column_ID=" + action.getAD_Column_ID()
-					+ " — " + e.getMessage());
-			result.addMessage(
-					"Rule '" + rule.getName() + "' action " + action.getSeqNo()
-					+ ": cannot resolve target column",
-					"W", null);
-			return;
-		}
+		String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
 
 		try {
 			String actionType = action.getBXS_ActionType();
