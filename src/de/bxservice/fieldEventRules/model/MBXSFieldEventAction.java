@@ -27,6 +27,8 @@ package de.bxservice.fieldEventRules.model;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.compiere.util.DB;
+
 import de.bxservice.fieldEventRules.engine.FieldEventRuleCache;
 
 public class MBXSFieldEventAction extends X_BXS_FieldEventAction {
@@ -39,6 +41,17 @@ public class MBXSFieldEventAction extends X_BXS_FieldEventAction {
 
 	public MBXSFieldEventAction(Properties ctx, ResultSet rs, String trxName) {
 		super(ctx, rs, trxName);
+	}
+	
+	@Override	
+	protected boolean beforeSave(boolean newRecord) {
+		if (getSeqNo() == 0) {
+			final String sql = "SELECT COALESCE(MAX(SeqNo),0) + 10 FROM "+ Table_Name
+								+" WHERE " + COLUMNNAME_BXS_FieldEventRule_ID + "=?";
+			int seqNo = DB.getSQLValueEx(get_TrxName(), sql, getBXS_FieldEventRule_ID());
+			setSeqNo(seqNo);
+		}
+		return true;
 	}
 
 	@Override

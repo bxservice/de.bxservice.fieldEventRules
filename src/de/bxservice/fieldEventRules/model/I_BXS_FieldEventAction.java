@@ -67,22 +67,6 @@ public interface I_BXS_FieldEventAction
 	@Deprecated(since="13") // use better methods with cache
 	public org.compiere.model.I_AD_Column getAD_Column() throws RuntimeException;
 
-    /** Column name AD_Message_ID */
-    public static final String COLUMNNAME_AD_Message_ID = "AD_Message_ID";
-
-	/** Set Message.
-	  * System Message
-	  */
-	public void setAD_Message_ID (int AD_Message_ID);
-
-	/** Get Message.
-	  * System Message
-	  */
-	public int getAD_Message_ID();
-
-	@Deprecated(since="13") // use better methods with cache
-	public org.compiere.model.I_AD_Message getAD_Message() throws RuntimeException;
-
     /** Column name AD_Org_ID */
     public static final String COLUMNNAME_AD_Org_ID = "AD_Org_ID";
 

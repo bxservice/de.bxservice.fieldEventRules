@@ -27,10 +27,12 @@ package de.bxservice.fieldEventRules.validator;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.adempiere.base.event.AbstractEventHandler;
 import org.adempiere.base.event.IEventManager;
@@ -68,6 +70,12 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 
 	private static final CLogger log = CLogger.getCLogger(FieldEventRuleEventHandler.class);
 
+	private static volatile FieldEventRuleEventHandler instance;
+
+	public static FieldEventRuleEventHandler getInstance() { return instance; }
+
+	private final Set<String> registeredTables = Collections.synchronizedSet(new HashSet<>());
+
 	private static final String SQL_TABLE_NAMES =
 			"SELECT DISTINCT t.TableName"
 			+ " FROM BXS_FieldEventRule r"
@@ -89,21 +97,41 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 			});
 			return;
 		}
-		
+
+		instance = this;
 		int count = 0;
 		try (PreparedStatement pstmt = DB.prepareStatement(SQL_TABLE_NAMES, null);
 				ResultSet rs = pstmt.executeQuery()) {
 			while (rs.next()) {
 				String tableName = rs.getString(1);
-				registerTableEvent(IEventTopics.PO_BEFORE_NEW, tableName);
-				registerTableEvent(IEventTopics.PO_BEFORE_CHANGE, tableName);
-				count++;
+				if (registeredTables.add(tableName)) {
+					registerTableEvent(IEventTopics.PO_BEFORE_NEW, tableName);
+					registerTableEvent(IEventTopics.PO_BEFORE_CHANGE, tableName);
+					count++;
+				}
 			}
 		} catch (Exception e) {
 			log.warning("FieldEventRuleEventHandler: failed to register tables — "
 					+ e.getMessage());
 		}
 		log.info("FieldEventRuleEventHandler: registered for " + count + " tables.");
+	}
+
+	public synchronized void syncRegistrations() {
+		if (!Adempiere.isStarted()) return;
+		try (PreparedStatement pstmt = DB.prepareStatement(SQL_TABLE_NAMES, null);
+				ResultSet rs = pstmt.executeQuery()) {
+			while (rs.next()) {
+				String tableName = rs.getString(1);
+				if (registeredTables.add(tableName)) {
+					registerTableEvent(IEventTopics.PO_BEFORE_NEW, tableName);
+					registerTableEvent(IEventTopics.PO_BEFORE_CHANGE, tableName);
+					log.info("FieldEventRuleEventHandler: registered new table " + tableName);
+				}
+			}
+		} catch (Exception e) {
+			log.warning("FieldEventRuleEventHandler.syncRegistrations failed: " + e.getMessage());
+		}
 	}
 
 	@Override

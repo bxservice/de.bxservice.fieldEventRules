@@ -66,7 +66,7 @@ public class FieldEventRuleCallout implements IColumnCallout {
 
 		result.getMessages().stream()
 				.filter(m -> "W".equals(m.getLevel()))
-				.forEach(m -> log.info("FieldEventRule warning: " + m.getMessage()));
+				.forEach(m -> log.warning("FieldEventRule warning: " + m.getMessage()));
 
 		return result.getMessages().stream()
 				.filter(m -> "E".equals(m.getLevel()))

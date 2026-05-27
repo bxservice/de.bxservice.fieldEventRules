@@ -28,8 +28,13 @@ import java.util.List;
 
 import org.adempiere.exceptions.AdempiereException;
 import org.compiere.model.MColumn;
+import org.compiere.model.MMessage;
+import org.compiere.model.PO;
 import org.compiere.util.CLogger;
+import org.compiere.util.DB;
+import org.compiere.util.Env;
 import org.compiere.util.Evaluatee;
+import org.compiere.util.Msg;
 
 import de.bxservice.fieldEventRules.engine.ConditionClauseValidator.Format;
 import de.bxservice.fieldEventRules.model.MBXSFieldEventAction;
@@ -42,10 +47,12 @@ import de.bxservice.fieldEventRules.model.X_BXS_FieldEventRule;
  * produces a {@link FieldEventResult}. Safe to instantiate per-call or as a
  * singleton.
  *
- * <p>Two entry points cover the two caller contexts:
+ * <p>
+ * Two entry points cover the two caller contexts:
  * <ul>
- *   <li>{@link #evaluateUITrigger} — called from a ZK callout (AD_Field_ID scope)
- *   <li>{@link #evaluateSaveTrigger} — called from a ModelValidator (AD_Column_ID scope)
+ * <li>{@link #evaluateUITrigger} — called from a ZK callout (AD_Field_ID scope)
+ * <li>{@link #evaluateSaveTrigger} — called from a ModelValidator (AD_Column_ID
+ * scope)
  * </ul>
  */
 public class FieldEventRuleEngine {
@@ -57,8 +64,8 @@ public class FieldEventRuleEngine {
 	private final ExpressionEvaluator evaluator = new ExpressionEvaluator();
 
 	public FieldEventResult evaluateUITrigger(int adFieldId, EvaluationContext ctx) {
-		return evaluate(X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID, adFieldId,
-				X_BXS_FieldEventRule.TRIGGEREVENT_UI, ctx);
+		return evaluate(X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID, adFieldId, X_BXS_FieldEventRule.TRIGGEREVENT_UI,
+				ctx);
 	}
 
 	public FieldEventResult evaluateSaveTrigger(int adColumnId, EvaluationContext ctx) {
@@ -66,11 +73,9 @@ public class FieldEventRuleEngine {
 				X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel, ctx);
 	}
 
-	private FieldEventResult evaluate(
-			String idColumn, int idValue, String triggerPath, EvaluationContext ctx) {
+	private FieldEventResult evaluate(String idColumn, int idValue, String triggerPath, EvaluationContext ctx) {
 
-		List<MBXSFieldEventRule> rules =
-				X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID.equals(idColumn)
+		List<MBXSFieldEventRule> rules = X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID.equals(idColumn)
 				? FieldEventRuleCache.get().getRulesByFieldId(idValue)
 				: FieldEventRuleCache.get().getRulesByColumnId(idValue);
 
@@ -84,19 +89,20 @@ public class FieldEventRuleEngine {
 			if (!conditionPasses(rule, ctx))
 				continue;
 
-			List<MBXSFieldEventAction> actions =
-					FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
-
-			for (MBXSFieldEventAction action : actions)
-				applyAction(action, rule, ctx, result);
+			if (X_BXS_FieldEventRule.BXS_RULETYPE_VALIDATE.equals(rule.getBXS_RuleType())) {
+				applyValidation(rule, result);
+			} else {
+				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
+				for (MBXSFieldEventAction action : actions)
+					applyAction(action, rule, ctx, result);
+			}
 		}
 
 		return result.build();
 	}
 
 	private static boolean matchesTrigger(String ruleEvent, String triggerPath) {
-		return triggerPath.equals(ruleEvent)
-				|| X_BXS_FieldEventRule.TRIGGEREVENT_Both.equals(ruleEvent);
+		return triggerPath.equals(ruleEvent) || X_BXS_FieldEventRule.TRIGGEREVENT_Both.equals(ruleEvent);
 	}
 
 	private boolean conditionPasses(MBXSFieldEventRule rule, EvaluationContext ctx) {
@@ -123,25 +129,32 @@ public class FieldEventRuleEngine {
 	}
 
 	private static boolean evaluateContextCondition(String condition, EvaluationContext ctx) {
-		return org.idempiere.expression.logic.LogicEvaluator
-				.evaluateLogic(evaluateeFor(ctx), condition);
+		return org.idempiere.expression.logic.LogicEvaluator.evaluateLogic(evaluateeFor(ctx), condition);
 	}
 
-	private boolean evaluateSQLCondition(String condition, EvaluationContext ctx)
-			throws AdempiereException {
+	private boolean evaluateSQLCondition(String condition, EvaluationContext ctx) throws AdempiereException {
 
-		// Strip @SQL= prefix and wrap as a scalar boolean query
 		String fragment = condition.substring(SQL_PREFIX.length());
-		String wrapped = SQL_PREFIX
-				+ "SELECT CASE WHEN (" + fragment + ") THEN 'Y' ELSE 'N' END"
-				+ " FROM (SELECT 1) AS T";
 
+		PO po = ctx.getPo();
+		if (po != null) {
+			String parsedFragment = Env.parseVariable(fragment, po, null, false);
+			String sql = "SELECT 1 FROM " + po.get_TableName()
+					+ " WHERE (" + parsedFragment + ") AND "
+					+ po.get_KeyColumns()[0] + "=?";
+			return DB.getSQLValueEx(po.get_TrxName(), sql, po.get_ID()) > 0;
+		}
+
+		// UI callout path: no persisted record, fall back to inline token substitution.
+		// Only @Token@ references work here; bare column names are not supported.
+		String wrapped = SQL_PREFIX + "SELECT CASE WHEN (" + fragment + ") THEN 'Y' ELSE 'N' END"
+				+ " FROM (SELECT 1) AS T";
 		Object result = evaluator.evaluate(wrapped, ctx);
 		return "Y".equals(String.valueOf(result));
 	}
 
-	private void applyAction(MBXSFieldEventAction action, MBXSFieldEventRule rule,
-			EvaluationContext ctx, FieldEventResult.Builder result) {
+	private void applyAction(MBXSFieldEventAction action, MBXSFieldEventRule rule, EvaluationContext ctx,
+			FieldEventResult.Builder result) {
 
 		String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
 
@@ -164,13 +177,29 @@ public class FieldEventRuleEngine {
 			}
 
 		} catch (Exception e) {
-			log.warning("Rule '" + rule.getName() + "' action " + action.getSeqNo()
-					+ " on column " + colName + ": " + e.getMessage());
+			log.warning("Rule '" + rule.getName() + "' action " + action.getSeqNo() + " on column " + colName + ": "
+					+ e.getMessage());
 			result.addMessage(
-					"Error in rule '" + rule.getName() + "' action " + action.getSeqNo()
-					+ ": " + e.getMessage(),
-					"W", colName);
+					"Error in rule '" + rule.getName() + "' action " + action.getSeqNo() + ": " + e.getMessage(), "W",
+					colName);
 		}
+	}
+
+	private static void applyValidation(MBXSFieldEventRule rule, FieldEventResult.Builder result) {
+		String level = rule.getBXS_ErrorLevel();
+		if (level == null || level.isBlank())
+			level = X_BXS_FieldEventRule.BXS_ERRORLEVEL_ErrorBlockSave;
+
+		String msg = null;
+		MMessage message = MMessage.get(Env.getCtx(), rule.getAD_Message_ID());
+		if (message != null) {
+			String msgValue = message.getValue();
+			msg = Msg.getMsg(Env.getCtx(), msgValue);
+		}
+		if (msg == null || msg.isBlank())
+			msg = rule.getName();
+
+		result.addMessage(msg, level, null);
 	}
 
 	private static Evaluatee evaluateeFor(EvaluationContext ctx) {

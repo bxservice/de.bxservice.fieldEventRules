@@ -31,7 +31,7 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
 	/**
 	 *
 	 */
-	private static final long serialVersionUID = 20260526L;
+	private static final long serialVersionUID = 20260527L;
 
     /** Standard Constructor */
     public X_BXS_FieldEventAction (Properties ctx, int BXS_FieldEventAction_ID, String trxName)
@@ -109,7 +109,7 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
     public String toString()
     {
       StringBuilder sb = new StringBuilder ("X_BXS_FieldEventAction[")
-        .append(get_UUID()).append("]");
+        .append(get_ID()).append("]");
       return sb.toString();
     }
 
@@ -137,35 +137,6 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
 	public int getAD_Column_ID()
 	{
 		Integer ii = (Integer)get_Value(COLUMNNAME_AD_Column_ID);
-		if (ii == null)
-			 return 0;
-		return ii.intValue();
-	}
-
-	@Deprecated(since="13") // use better methods with cache
-	public org.compiere.model.I_AD_Message getAD_Message() throws RuntimeException
-	{
-		return (org.compiere.model.I_AD_Message)MTable.get(getCtx(), org.compiere.model.I_AD_Message.Table_ID)
-			.getPO(getAD_Message_ID(), get_TrxName());
-	}
-
-	/** Set Message.
-		@param AD_Message_ID System Message
-	*/
-	public void setAD_Message_ID (int AD_Message_ID)
-	{
-		if (AD_Message_ID < 1)
-			set_Value (COLUMNNAME_AD_Message_ID, null);
-		else
-			set_Value (COLUMNNAME_AD_Message_ID, Integer.valueOf(AD_Message_ID));
-	}
-
-	/** Get Message.
-		@return System Message
-	  */
-	public int getAD_Message_ID()
-	{
-		Integer ii = (Integer)get_Value(COLUMNNAME_AD_Message_ID);
 		if (ii == null)
 			 return 0;
 		return ii.intValue();

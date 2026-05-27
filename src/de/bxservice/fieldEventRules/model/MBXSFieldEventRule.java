@@ -30,11 +30,13 @@ import java.util.Properties;
 import org.adempiere.exceptions.AdempiereException;
 import org.compiere.model.MField;
 import org.compiere.model.MTab;
+import org.compiere.util.DB;
 import org.compiere.util.Msg;
 
 import de.bxservice.fieldEventRules.callout.FieldEventRuleCalloutRegister;
 import de.bxservice.fieldEventRules.engine.ConditionClauseValidator;
 import de.bxservice.fieldEventRules.engine.FieldEventRuleCache;
+import de.bxservice.fieldEventRules.validator.FieldEventRuleEventHandler;
 
 public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 
@@ -50,6 +52,13 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 
 	@Override
 	protected boolean beforeSave(boolean newRecord) {
+		if (getSeqNo() == 0) {
+			final String sql = "SELECT COALESCE(MAX(SeqNo),0) + 10 FROM "+ Table_Name
+								+" WHERE AD_Table_ID=? AND AD_Column_ID=?";
+			int seqNo = DB.getSQLValueEx(get_TrxName(), sql, getAD_Table_ID(), getAD_Column_ID());
+			setSeqNo(seqNo);
+		}
+		
 		if (getAD_Tab_ID() > 0) {
 			MTab tab = MTab.get(getAD_Tab_ID());
 			if (tab != null) {
@@ -102,6 +111,8 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 			FieldEventRuleCache.get().invalidate();
 			FieldEventRuleCalloutRegister register = FieldEventRuleCalloutRegister.getInstance();
 			if (register != null) register.syncRegistrations();
+			FieldEventRuleEventHandler handler = FieldEventRuleEventHandler.getInstance();
+			if (handler != null) handler.syncRegistrations();
 		}
 		return super.afterSave(newRecord, success);
 	}
@@ -112,6 +123,8 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 			FieldEventRuleCache.get().invalidate();
 			FieldEventRuleCalloutRegister register = FieldEventRuleCalloutRegister.getInstance();
 			if (register != null) register.syncRegistrations();
+			FieldEventRuleEventHandler handler = FieldEventRuleEventHandler.getInstance();
+			if (handler != null) handler.syncRegistrations();
 		}
 		return super.afterDelete(success);
 	}

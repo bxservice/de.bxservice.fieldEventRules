@@ -31,7 +31,7 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
 	/**
 	 *
 	 */
-	private static final long serialVersionUID = 20260526L;
+	private static final long serialVersionUID = 20260527L;
 
     /** Standard Constructor */
     public X_BXS_FieldEventRule (Properties ctx, int BXS_FieldEventRule_ID, String trxName)
@@ -39,7 +39,6 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
       super (ctx, BXS_FieldEventRule_ID, trxName);
       /** if (BXS_FieldEventRule_ID == 0)
         {
-			setBXS_Condition (null);
 			setBXS_FieldEventRule_ID (0);
 			setBXS_RuleType (null);
 			setName (null);
@@ -53,7 +52,6 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
       super (ctx, BXS_FieldEventRule_ID, trxName, virtualColumns);
       /** if (BXS_FieldEventRule_ID == 0)
         {
-			setBXS_Condition (null);
 			setBXS_FieldEventRule_ID (0);
 			setBXS_RuleType (null);
 			setName (null);
@@ -67,7 +65,6 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
       super (ctx, BXS_FieldEventRule_UU, trxName);
       /** if (BXS_FieldEventRule_UU == null)
         {
-			setBXS_Condition (null);
 			setBXS_FieldEventRule_ID (0);
 			setBXS_RuleType (null);
 			setName (null);
@@ -81,7 +78,6 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
       super (ctx, BXS_FieldEventRule_UU, trxName, virtualColumns);
       /** if (BXS_FieldEventRule_UU == null)
         {
-			setBXS_Condition (null);
 			setBXS_FieldEventRule_ID (0);
 			setBXS_RuleType (null);
 			setName (null);
@@ -170,6 +166,35 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
 	public int getAD_Field_ID()
 	{
 		Integer ii = (Integer)get_Value(COLUMNNAME_AD_Field_ID);
+		if (ii == null)
+			 return 0;
+		return ii.intValue();
+	}
+
+	@Deprecated(since="13") // use better methods with cache
+	public org.compiere.model.I_AD_Message getAD_Message() throws RuntimeException
+	{
+		return (org.compiere.model.I_AD_Message)MTable.get(getCtx(), org.compiere.model.I_AD_Message.Table_ID)
+			.getPO(getAD_Message_ID(), get_TrxName());
+	}
+
+	/** Set Message.
+		@param AD_Message_ID System Message
+	*/
+	public void setAD_Message_ID (int AD_Message_ID)
+	{
+		if (AD_Message_ID < 1)
+			set_Value (COLUMNNAME_AD_Message_ID, null);
+		else
+			set_Value (COLUMNNAME_AD_Message_ID, Integer.valueOf(AD_Message_ID));
+	}
+
+	/** Get Message.
+		@return System Message
+	  */
+	public int getAD_Message_ID()
+	{
+		Integer ii = (Integer)get_Value(COLUMNNAME_AD_Message_ID);
 		if (ii == null)
 			 return 0;
 		return ii.intValue();

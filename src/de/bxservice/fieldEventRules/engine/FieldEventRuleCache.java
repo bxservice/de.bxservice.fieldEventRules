@@ -121,9 +121,9 @@ public class FieldEventRuleCache {
 		try {
 			List<MBXSFieldEventRule> list = new Query(Env.getCtx(),
 					MBXSFieldEventRule.Table_Name,
-					X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID + " = ?", null)
+					X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID + " = ? AND AD_Client_ID IN (0,?)", null)
 					.setOnlyActiveRecords(true)
-					.setParameters(adFieldId)
+					.setParameters(adFieldId, Env.getAD_Client_ID(Env.getCtx()))
 					.setOrderBy(X_BXS_FieldEventRule.COLUMNNAME_SeqNo)
 					.list();
 			return Collections.unmodifiableList(list);
@@ -137,9 +137,9 @@ public class FieldEventRuleCache {
 		try {
 			List<MBXSFieldEventRule> list = new Query(Env.getCtx(),
 					MBXSFieldEventRule.Table_Name,
-					X_BXS_FieldEventRule.COLUMNNAME_AD_Column_ID + " = ?", null)
+					X_BXS_FieldEventRule.COLUMNNAME_AD_Column_ID + " = ? AND AD_Client_ID IN (0,?)", null)
 					.setOnlyActiveRecords(true)
-					.setParameters(adColumnId)
+					.setParameters(adColumnId, Env.getAD_Client_ID(Env.getCtx()))
 					.setOrderBy(X_BXS_FieldEventRule.COLUMNNAME_SeqNo)
 					.list();
 			return Collections.unmodifiableList(list);
