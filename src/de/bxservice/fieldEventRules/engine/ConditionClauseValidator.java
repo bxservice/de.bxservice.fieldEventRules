@@ -29,6 +29,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.adempiere.exceptions.AdempiereException;
+import org.compiere.util.DB;
+import org.compiere.util.Util;
 import org.idempiere.expression.logic.LogicEvaluator;
 
 /**
@@ -60,6 +62,25 @@ public class ConditionClauseValidator {
 			return validateSqlFormat(clause);
 
 		return validateContextExpression(clause);
+	}
+
+	/**
+	 * Executes the SQL condition fragment against dual to catch errors like missing columns.
+	 * Tokens are replaced with NULL before execution. No-op for non-SQL conditions.
+	 */
+	public static void dryRunSqlCondition(String condition) throws AdempiereException {
+		if (Util.isEmpty(condition) || !condition.startsWith(SQL_PREFIX))
+			return;
+
+		String fragment = condition.substring(SQL_PREFIX.length()).trim();
+		fragment = TOKEN_PATTERN.matcher(fragment).replaceAll("NULL");
+
+		String sql = "SELECT 1 FROM dual WHERE (" + fragment + ")";
+		try {
+			DB.getSQLValueEx(null, sql);
+		} catch (Exception e) {
+			throw new AdempiereException(e.getMessage());
+		}
 	}
 
 	/** Package-accessible check reused by {@link ExpressionEvaluator#assertSafeSql}. */

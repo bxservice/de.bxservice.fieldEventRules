@@ -100,6 +100,12 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 				log.saveError("ConditionClause", e.getMessage());
 				return false;
 			}
+			try {
+				ConditionClauseValidator.dryRunSqlCondition(getBXS_Condition());
+			} catch (AdempiereException e) {
+				log.saveError("SQLConditionDryRun", e.getMessage());
+				return false;
+			}
 		}
 
 		return super.beforeSave(newRecord);

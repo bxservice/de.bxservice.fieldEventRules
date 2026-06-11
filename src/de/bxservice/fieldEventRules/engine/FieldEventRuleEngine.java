@@ -139,10 +139,9 @@ public class FieldEventRuleEngine {
 		PO po = ctx.getPo();
 		if (po != null) {
 			String parsedFragment = Env.parseVariable(fragment, po, null, false);
-			String sql = "SELECT 1 FROM " + po.get_TableName()
-					+ " WHERE (" + parsedFragment + ") AND "
-					+ po.get_KeyColumns()[0] + "=?";
-			return DB.getSQLValueEx(po.get_TrxName(), sql, po.get_ID()) > 0;
+			String sql = "SELECT 1 FROM dual "
+					+ " WHERE (" + parsedFragment + ")";
+			return DB.getSQLValueEx(po.get_TrxName(), sql) > 0;
 		}
 
 		// UI callout path: no persisted record, fall back to inline token substitution.
