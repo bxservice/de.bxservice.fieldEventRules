@@ -1,5 +1,7 @@
 # Field Event Rules
 
+> This plug-in was sponsored by **Energy Kinetics**.
+
 Field Event Rules let you define "when this field changes, do that" logic directly inside the iDempiere Application Dictionary — without writing Java code, installing plugins, or touching an IDE.
 
 Think of it as a lightweight form event system: you attach rules to fields or columns, describe what should happen in plain SQL or a simple expression, and the system takes care of executing them both in the UI and when records are saved through any channel.
