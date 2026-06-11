@@ -23,8 +23,8 @@ All of these work whether the record is created through a window, a background p
 A Field Event Rule sits between a field (or column) and a piece of logic you define. It has three parts:
 
 **1. Trigger** — when does it fire?
-- *On field change* — fires immediately in the UI when a user leaves the field, the same moment a callout would.
-- *On save* — fires when the record is being saved, regardless of how it was created.
+- *On field change* (UI / callout) — fires immediately in the UI when a user leaves the field, the same moment a callout would. Does not fire on background saves.
+- *On save* (model) — fires when the record is being saved, regardless of how it was created. Runs after the user clicks Save, or when a process/import writes the record.
 - *Both* — fires at both moments, so the UI stays responsive and data consistency is guaranteed for non-UI operations too.
 
 **2. Condition** *(optional)* — should it fire this time?
@@ -66,6 +66,8 @@ Rules can be scoped at two levels and you can combine them.
 **Column-level scope** (model-wide): attach a rule to a column on a table. The rule fires whenever any record on that table is saved, regardless of which window was used — or even if no window was involved. Use this for data integrity rules that must hold universally.
 
 If you want a rule to do both — show responsive feedback in the UI *and* enforce the consequence on save — set the Trigger to "Both" and the Execution Scope to "Both". The engine avoids double-applying the same value when the UI path already set it.
+
+> **Window field left blank** — if you leave the Window (and Tab / Field) blank, the rule applies to every window that uses the configured table/column. Use this when the logic should be universal rather than window-specific.
 
 ---
 
@@ -156,111 +158,91 @@ Use `@ColumnName@` to reference any value from the current record. The engine re
 | Syntax | Resolves to |
 |---|---|
 | `@ColumnName@` | Current value of that column in the record |
+| `@Table.ColumnName@` | Value of a column on a related table, resolved via the current record's foreign key (e.g. `@C_BPartner.Description@` reads the Description from the linked Business Partner) |
 | `@#Variable@` | Global system context (e.g. `@#AD_Client_ID@`) |
 | `@$Variable@` | Window-level context |
 
 If a variable cannot be resolved, it is substituted with `NULL` and a warning is logged. The rule continues rather than failing hard.
 
+> **SQL validation on save** — when you save a rule configuration, the system performs a dry run to detect malformed SQL before the rule can affect real data. Fix any reported syntax errors before the rule will activate.
+
 ---
 
 ## Examples
 
-### Example 1 — Default Payment Term from Business Partner
+### Example 1 — Fill description and check credit status from Business Partner
 
-When the Business Partner is changed on an order, fill in the Payment Term automatically.
-
-| Field | Value |
-|---|---|
-| Field | Business Partner (on Sales Order header) |
-| Trigger | On field change |
-| Scope | UI only |
-
-Action:
+When the Business Partner is changed on a Sales Order, copy the partner's description into the order's Description field and write a credit status indicator into PO Reference.
 
 | Field | Value |
 |---|---|
-| Type | SET IF BLANK |
-| Target | `C_PaymentTerm_ID` |
-| Expression | `SELECT C_PaymentTerm_ID FROM C_BPartner WHERE C_BPartner_ID = @C_BPartner_ID@` |
+| Window | Sales Order |
+| Tab | Order |
+| Field | Business Partner |
+| Trigger | On field change (UI) |
+| Rule Type | SET |
 
----
-
-### Example 2 — Recalculate Line Net Amount
-
-Whenever Qty Ordered or Price Actual changes on an order line, recompute the net amount. Because this also fires on save, the value stays correct even when lines are created by an import or a process.
-
-| Field | Value |
-|---|---|
-| Column | `QtyOrdered` (on C_OrderLine) |
-| Trigger | Both |
-| Scope | Both |
-
-Action:
+Action 1 — copy the partner description:
 
 | Field | Value |
 |---|---|
 | Type | SET |
-| Target | `LineNetAmt` |
-| Expression | `@QtyOrdered@ * @PriceActual@` |
+| Target | `Description` |
+| Expression | `@C_BPartner.Description@` |
 
-Create a second identical rule attached to `PriceActual`.
+Action 2 — write credit status into PO Reference:
+
+| Field | Value |
+|---|---|
+| Type | SET |
+| Target | `POReference` |
+| Expression | `SELECT CASE WHEN @GrandTotal@ <= SO_CreditLimit THEN 'OK' ELSE 'Over the limit' END FROM C_BPartner WHERE C_BPartner_ID = @C_BPartner_ID@` |
 
 ---
 
-### Example 3 — Default Warehouse from Org
+### Example 2 — Validate credit limit on Business Partner change
 
-When the Organisation is set on a new record, fill the Warehouse from that org's default — but only if Warehouse is currently blank.
-
-| Field | Value |
-|---|---|
-| Field | AD_Org_ID (on the relevant window) |
-| Trigger | On field change |
-| Scope | UI only |
-
-Action:
+Warn the user immediately when the order's Grand Total already exceeds the selected Business Partner's credit limit. The Condition pre-checks the limit so the VALIDATE action only fires when there is actually a problem.
 
 | Field | Value |
 |---|---|
-| Type | SET IF BLANK |
-| Target | `M_Warehouse_ID` |
-| Expression | `SELECT M_Warehouse_ID FROM AD_OrgInfo WHERE AD_Org_ID = @AD_Org_ID@` |
-
----
-
-### Example 4 — Warn if order exceeds credit limit
-
-Before saving an invoice, warn if the total exceeds the Business Partner's credit limit. This is a save-time validation that does not block the user (Warning level), it just requires acknowledgement.
-
-| Field | Value |
-|---|---|
-| Column | `GrandTotal` (on C_Invoice) |
-| Trigger | On save |
-| Scope | Model |
+| Window | Sales Order |
+| Tab | Order |
+| Field | Business Partner |
+| Trigger | On field change (UI) |
+| Condition | `@SQL=(SELECT bp.SO_CreditLimit FROM C_BPartner bp WHERE bp.C_BPartner_ID = @C_BPartner_ID@) < @GrandTotal@` |
 | Rule Type | VALIDATE |
-| Error Level | Warning |
 
 Action:
 
 | Field | Value |
 |---|---|
 | Type | VALIDATE |
-| Expression | `SELECT CASE WHEN @GrandTotal@ <= SO_CreditLimit THEN 'Y' ELSE 'N' END FROM C_BPartner WHERE C_BPartner_ID = @C_BPartner_ID@` |
-| Message | Invoice amount exceeds the credit limit for this Business Partner. Please review before proceeding. |
+| Expression | (evaluates to `N` — the Condition already ensures this fires only on violation) |
+| Message | Grand Total exceeds the credit limit for this Business Partner. |
 
 ---
 
-### Example 5 — Conditional rule using a Condition
+### Example 3 — Auto-set Drop Ship flag based on delivery region
 
-Copy the Bill-To address from the Business Partner, but only on Sales Orders (not Purchase Orders).
+When the Partner Location is selected on a Sales Order, automatically enable Drop Ship if the delivery address is in New Jersey.
 
 | Field | Value |
 |---|---|
-| Column | `C_BPartner_ID` |
-| Trigger | On field change |
-| Scope | UI only |
-| Condition | `@IsSOTrx@=Y` |
+| Window | Sales Order |
+| Tab | Order |
+| Field | Partner Location |
+| Trigger | On field change (UI) |
+| Condition | `@SQL=(SELECT l.RegionName FROM C_Location l JOIN C_BPartner_Location cbl ON l.C_Location_ID = cbl.C_Location_ID WHERE cbl.C_BPartner_Location_ID = @C_BPartner_Location_ID@) = 'NJ'` |
+| Rule Type | SET |
 
-Action: SET `BillTo_ID` from a lookup on the Business Partner.
+Action:
+
+| Field | Value |
+|---|---|
+| Type | SET |
+| Target | `IsDropShip` |
+| Expression | `'Y'` |
 
 ---
 
@@ -280,8 +262,8 @@ When Rule Type is VALIDATE, the action expression must evaluate to `'Y'` (case-i
 
 **Error level** controls what happens on failure:
 
-- **Error** — blocks the save. The user must correct the value before the record can be saved.
-- **Warning** — allows the save to proceed, but shows a message the user must acknowledge.
+- **Error** — blocks the operation. On field change (UI), a popup is shown and the field is flagged. On save (model), an exception is thrown and the record cannot be saved until the condition is satisfied.
+- **Warning** — allows the operation to proceed, but shows a message the user must acknowledge before continuing.
 
 Validation rules work at both the UI (immediate feedback on field change) and model level (enforced on save regardless of channel).
 
