@@ -161,6 +161,12 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 		}
 
 		combined.getMessages().stream()
+				.filter(m -> "W".equals(m.getLevel()))
+				.map(ValidationMessage::getMessage)
+				.findFirst()
+				.ifPresent(msg -> log.saveWarning(msg, ""));
+
+		combined.getMessages().stream()
 				.filter(m -> "E".equals(m.getLevel()))
 				.map(ValidationMessage::getMessage)
 				.findFirst()
