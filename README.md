@@ -1,6 +1,6 @@
 # Field Event Rules
 
-> This plug-in was sponsored by **Energy Kinetics**.
+> This plug-in was sponsored by **[Energy Kinetics, Inc.](https://energykinetics.com/)**.
 
 Field Event Rules let you define "when this field changes, do that" logic directly inside the iDempiere Application Dictionary — without writing Java code, installing plugins, or touching an IDE.
 
