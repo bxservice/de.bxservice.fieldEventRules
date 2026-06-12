@@ -39,6 +39,7 @@ import org.adempiere.base.event.IEventManager;
 import org.adempiere.base.event.IEventTopics;
 import org.adempiere.exceptions.AdempiereException;
 import org.compiere.Adempiere;
+import org.compiere.model.MColumn;
 import org.compiere.model.PO;
 import org.compiere.model.ServerStateChangeEvent;
 import org.compiere.model.ServerStateChangeListener;
@@ -79,8 +80,7 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 	private static final String SQL_TABLE_NAMES =
 			"SELECT DISTINCT t.TableName"
 			+ " FROM BXS_FieldEventRule r"
-			+ " JOIN AD_Column c ON c.AD_Column_ID = r.AD_Column_ID"
-			+ " JOIN AD_Table  t ON t.AD_Table_ID  = c.AD_Table_ID"
+			+ " JOIN AD_Table t ON t.AD_Table_ID = r.AD_Table_ID"
 			+ " WHERE r.IsActive     = 'Y'"
 			+ "   AND r.AD_Column_ID IS NOT NULL"
 			+ "   AND r.TriggerEvent IN ('S', 'B')";
@@ -117,9 +117,9 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 		log.info("FieldEventRuleEventHandler: registered for " + count + " tables.");
 	}
 
-	public synchronized void syncRegistrations() {
+	public synchronized void syncRegistrations(String trxName) {
 		if (!Adempiere.isStarted()) return;
-		try (PreparedStatement pstmt = DB.prepareStatement(SQL_TABLE_NAMES, null);
+		try (PreparedStatement pstmt = DB.prepareStatement(SQL_TABLE_NAMES, trxName);
 				ResultSet rs = pstmt.executeQuery()) {
 			while (rs.next()) {
 				String tableName = rs.getString(1);
@@ -144,8 +144,14 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 
 		FieldEventResult combined = FieldEventResult.empty();
 		FieldEventRuleEngine engine = new FieldEventRuleEngine();
+		boolean isNewRecord = IEventTopics.PO_BEFORE_NEW.equals(event.getTopic());
 
 		for (int adColumnId : columnIds) {
+			if (!isNewRecord) {
+				String columnName = MColumn.getColumnName(po.getCtx(), adColumnId);
+				if (!po.is_ValueChanged(columnName))
+					continue;
+			}
 			FieldEventResult result;
 			try {
 				result = engine.evaluateSaveTrigger(adColumnId, evalCtx);

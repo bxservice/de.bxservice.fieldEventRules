@@ -28,6 +28,7 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.adempiere.exceptions.AdempiereException;
+import org.compiere.model.MColumn;
 import org.compiere.model.MField;
 import org.compiere.model.MTab;
 import org.compiere.util.DB;
@@ -76,13 +77,19 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 			MField field = MField.get(getAD_Field_ID());
 			if (field != null) {
 				setAD_Column_ID(field.getAD_Column_ID());
-				
+
 				if (field.getAD_Column_ID() != getAD_Column_ID())
 					throw new AdempiereException(
 							Msg.getElement(getCtx(), COLUMNNAME_AD_Field_ID) + " / "
 							+ Msg.getElement(getCtx(), COLUMNNAME_AD_Column_ID)
 							+ " mismatch");
 			}
+		}
+
+		if (getAD_Column_ID() > 0 && getAD_Table_ID() == 0) {
+			MColumn col = MColumn.get(getCtx(), getAD_Column_ID());
+			if (col != null)
+				setAD_Table_ID(col.getAD_Table_ID());
 		}
 
 		// Either AD_Window_ID or AD_Table_ID must be filled
@@ -115,10 +122,11 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 	protected boolean afterSave(boolean newRecord, boolean success) {
 		if (success) {
 			FieldEventRuleCache.get().invalidate();
+			String trxName = get_TrxName();
 			FieldEventRuleCalloutRegister register = FieldEventRuleCalloutRegister.getInstance();
-			if (register != null) register.syncRegistrations();
+			if (register != null) register.syncRegistrations(trxName);
 			FieldEventRuleEventHandler handler = FieldEventRuleEventHandler.getInstance();
-			if (handler != null) handler.syncRegistrations();
+			if (handler != null) handler.syncRegistrations(trxName);
 		}
 		return super.afterSave(newRecord, success);
 	}
@@ -127,10 +135,11 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 	protected boolean afterDelete(boolean success) {
 		if (success) {
 			FieldEventRuleCache.get().invalidate();
+			String trxName = get_TrxName();
 			FieldEventRuleCalloutRegister register = FieldEventRuleCalloutRegister.getInstance();
-			if (register != null) register.syncRegistrations();
+			if (register != null) register.syncRegistrations(trxName);
 			FieldEventRuleEventHandler handler = FieldEventRuleEventHandler.getInstance();
-			if (handler != null) handler.syncRegistrations();
+			if (handler != null) handler.syncRegistrations(trxName);
 		}
 		return super.afterDelete(success);
 	}

@@ -63,21 +63,17 @@ public class FieldEventRuleEngine {
 
 	private final ExpressionEvaluator evaluator = new ExpressionEvaluator();
 
-	public FieldEventResult evaluateUITrigger(int adFieldId, EvaluationContext ctx) {
-		return evaluate(X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID, adFieldId, X_BXS_FieldEventRule.TRIGGEREVENT_UI,
-				ctx);
+	public FieldEventResult evaluateUITrigger(int adColumnId, EvaluationContext ctx) {
+		return evaluate(adColumnId, X_BXS_FieldEventRule.TRIGGEREVENT_UI, ctx);
 	}
 
 	public FieldEventResult evaluateSaveTrigger(int adColumnId, EvaluationContext ctx) {
-		return evaluate(X_BXS_FieldEventRule.COLUMNNAME_AD_Column_ID, adColumnId,
-				X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel, ctx);
+		return evaluate(adColumnId, X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel, ctx);
 	}
 
-	private FieldEventResult evaluate(String idColumn, int idValue, String triggerPath, EvaluationContext ctx) {
+	private FieldEventResult evaluate(int adColumnId, String triggerPath, EvaluationContext ctx) {
 
-		List<MBXSFieldEventRule> rules = X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID.equals(idColumn)
-				? FieldEventRuleCache.get().getRulesByFieldId(idValue)
-				: FieldEventRuleCache.get().getRulesByColumnId(idValue);
+		List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
 
 		FieldEventResult.Builder result = new FieldEventResult.Builder();
 

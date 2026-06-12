@@ -27,8 +27,10 @@ package de.bxservice.fieldEventRules.model;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.adempiere.exceptions.AdempiereException;
 import org.compiere.util.DB;
 
+import de.bxservice.fieldEventRules.engine.ConditionClauseValidator;
 import de.bxservice.fieldEventRules.engine.FieldEventRuleCache;
 
 public class MBXSFieldEventAction extends X_BXS_FieldEventAction {
@@ -43,7 +45,7 @@ public class MBXSFieldEventAction extends X_BXS_FieldEventAction {
 		super(ctx, rs, trxName);
 	}
 	
-	@Override	
+	@Override
 	protected boolean beforeSave(boolean newRecord) {
 		if (getSeqNo() == 0) {
 			final String sql = "SELECT COALESCE(MAX(SeqNo),0) + 10 FROM "+ Table_Name
@@ -51,6 +53,22 @@ public class MBXSFieldEventAction extends X_BXS_FieldEventAction {
 			int seqNo = DB.getSQLValueEx(get_TrxName(), sql, getBXS_FieldEventRule_ID());
 			setSeqNo(seqNo);
 		}
+
+		if (newRecord || is_ValueChanged(COLUMNNAME_BXS_ValueExpression)) {
+			try {
+				ConditionClauseValidator.validateSqlExpression(getBXS_ValueExpression());
+			} catch (AdempiereException e) {
+				log.saveError("SQLExpressionValidation", e.getMessage());
+				return false;
+			}
+			try {
+				ConditionClauseValidator.dryRunSqlExpression(getBXS_ValueExpression());
+			} catch (AdempiereException e) {
+				log.saveError("SQLExpressionDryRun", e.getMessage());
+				return false;
+			}
+		}
+
 		return true;
 	}
 

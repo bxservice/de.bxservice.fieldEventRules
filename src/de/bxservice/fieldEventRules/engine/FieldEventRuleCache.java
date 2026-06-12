@@ -50,16 +50,13 @@ public class FieldEventRuleCache {
 	private static final String SQL_COLUMN_IDS =
 			"SELECT r.AD_Column_ID"
 			+ " FROM BXS_FieldEventRule r"
-			+ " JOIN AD_Column c ON c.AD_Column_ID = r.AD_Column_ID"
-			+ " JOIN AD_Table  t ON t.AD_Table_ID  = c.AD_Table_ID"
+			+ " JOIN AD_Table t ON t.AD_Table_ID = r.AD_Table_ID"
 			+ " WHERE t.TableName    = ?"
 			+ "   AND r.IsActive     = 'Y'"
 			+ "   AND r.AD_Column_ID IS NOT NULL"
 			+ "   AND r.TriggerEvent IN ('S', 'B')"
 			+ " ORDER BY r.SeqNo";
 
-	private static final CCache<Integer, List<MBXSFieldEventRule>> rulesByFieldId =
-			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleByField", 30, 0, false, 500);
 	private static final CCache<Integer, List<MBXSFieldEventRule>> rulesByColumnId =
 			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleByColumn", 30, 0, false, 500);
 	private static final CCache<String, List<Integer>> columnIdsByTable =
@@ -71,15 +68,6 @@ public class FieldEventRuleCache {
 
 	public static FieldEventRuleCache get() {
 		return INSTANCE;
-	}
-
-	public List<MBXSFieldEventRule> getRulesByFieldId(int adFieldId) {
-		List<MBXSFieldEventRule> list = rulesByFieldId.get(adFieldId);
-		if (list != null)
-			return list;
-		list = loadRulesByFieldId(adFieldId);
-		rulesByFieldId.put(adFieldId, list);
-		return list;
 	}
 
 	public List<MBXSFieldEventRule> getRulesByColumnId(int adColumnId) {
@@ -110,27 +98,10 @@ public class FieldEventRuleCache {
 	}
 
 	public void invalidate() {
-		rulesByFieldId.reset();
 		rulesByColumnId.reset();
 		columnIdsByTable.reset();
 		actionsByRuleId.reset();
 		log.fine("FieldEventRuleCache invalidated");
-	}
-
-	private static List<MBXSFieldEventRule> loadRulesByFieldId(int adFieldId) {
-		try {
-			List<MBXSFieldEventRule> list = new Query(Env.getCtx(),
-					MBXSFieldEventRule.Table_Name,
-					X_BXS_FieldEventRule.COLUMNNAME_AD_Field_ID + " = ? AND AD_Client_ID IN (0,?)", null)
-					.setOnlyActiveRecords(true)
-					.setParameters(adFieldId, Env.getAD_Client_ID(Env.getCtx()))
-					.setOrderBy(X_BXS_FieldEventRule.COLUMNNAME_SeqNo)
-					.list();
-			return Collections.unmodifiableList(list);
-		} catch (Exception e) {
-			log.warning("FieldEventRuleCache: failed to load rules for AD_Field_ID=" + adFieldId + ": " + e.getMessage());
-			return Collections.emptyList();
-		}
 	}
 
 	private static List<MBXSFieldEventRule> loadRulesByColumnId(int adColumnId) {

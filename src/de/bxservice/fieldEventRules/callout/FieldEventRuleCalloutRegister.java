@@ -53,12 +53,9 @@ public class FieldEventRuleCalloutRegister {
 	private static final String SQL =
 			"SELECT DISTINCT t.TableName, c.ColumnName"
 			+ " FROM BXS_FieldEventRule r"
-			+ " JOIN AD_Field  f  ON f.AD_Field_ID  = r.AD_Field_ID"
-			+ " JOIN AD_Column c  ON c.AD_Column_ID = f.AD_Column_ID"
-			+ " JOIN AD_Tab    tb ON tb.AD_Tab_ID   = f.AD_Tab_ID"
-			+ " JOIN AD_Table  t  ON t.AD_Table_ID  = tb.AD_Table_ID"
+			+ " JOIN AD_Column c  ON c.AD_Column_ID = r.AD_Column_ID"
+			+ " JOIN AD_Table  t  ON t.AD_Table_ID  = r.AD_Table_ID"
 			+ " WHERE r.IsActive    = 'Y'"
-			+ "   AND r.AD_Field_ID IS NOT NULL"
 			+ "   AND r.TriggerEvent IN ('U', 'B')";
 
 	@Reference(service = IMappedColumnCalloutFactory.class, cardinality = ReferenceCardinality.MANDATORY)
@@ -76,10 +73,14 @@ public class FieldEventRuleCalloutRegister {
 	}
 
 	public void registerAll() {
+		registerAll(null);
+	}
+
+	public void registerAll(String trxName) {
 		int columnCount = 0;
 		Set<String> tables = new HashSet<>();
 
-		try (PreparedStatement pstmt = DB.prepareStatement(SQL, null)) {
+		try (PreparedStatement pstmt = DB.prepareStatement(SQL, trxName)) {
 			ResultSet rs = pstmt.executeQuery();
 			while (rs.next()) {
 				String tableName  = rs.getString(1);
@@ -97,7 +98,7 @@ public class FieldEventRuleCalloutRegister {
 				+ columnCount + " columns across " + tables.size() + " tables.");
 	}
 
-	public void syncRegistrations() {
-		registerAll();
+	public void syncRegistrations(String trxName) {
+		registerAll(trxName);
 	}
 }

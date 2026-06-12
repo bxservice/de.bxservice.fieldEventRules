@@ -83,6 +83,43 @@ public class ConditionClauseValidator {
 		}
 	}
 
+	/**
+	 * Validates a fully-qualified SQL value expression (e.g. {@code @SQL=SELECT ...}).
+	 * Checks the fragment after the prefix is non-blank and contains no forbidden keywords.
+	 */
+	public static void validateSqlExpression(String expression) throws AdempiereException {
+		if (Util.isEmpty(expression) || !expression.startsWith(SQL_PREFIX))
+			return;
+
+		String sql = expression.substring(SQL_PREFIX.length());
+		if (sql.isBlank())
+			throw new AdempiereException(
+				"ValueExpression SQL (@SQL=...) must have a non-empty SQL statement after the prefix.");
+
+		String normalized = TOKEN_PATTERN.matcher(sql).replaceAll("NULL");
+		Matcher m = FORBIDDEN_KEYWORD_PATTERN.matcher(normalized);
+		if (m.find())
+			throw new AdempiereException(
+				"ValueExpression SQL contains forbidden keyword: " + m.group().toUpperCase() + ".");
+	}
+
+	/**
+	 * Executes the fully-qualified SQL value expression to catch syntax/schema errors.
+	 * Tokens are replaced with NULL before execution. No-op for non-SQL expressions.
+	 */
+	public static void dryRunSqlExpression(String expression) throws AdempiereException {
+		if (Util.isEmpty(expression) || !expression.startsWith(SQL_PREFIX))
+			return;
+
+		String sql = expression.substring(SQL_PREFIX.length()).trim();
+		sql = TOKEN_PATTERN.matcher(sql).replaceAll("NULL");
+		try {
+			DB.getSQLValueEx(null, sql);
+		} catch (Exception e) {
+			throw new AdempiereException(e.getMessage());
+		}
+	}
+
 	/** Package-accessible check reused by {@link ExpressionEvaluator#assertSafeSql}. */
 	static boolean hasForbiddenKeyword(String sql) {
 		return FORBIDDEN_KEYWORD_PATTERN.matcher(sql).find();

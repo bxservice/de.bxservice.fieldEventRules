@@ -47,18 +47,18 @@ public class FieldEventRuleCallout implements IColumnCallout {
 	public String start(Properties ctx, int WindowNo,
 			GridTab mTab, GridField mField, Object value, Object oldValue) {
 
-		int adFieldId = mField.getAD_Field_ID();
-		if (adFieldId <= 0) return "";
+		int adColumnId = mField.getAD_Column_ID();
+		if (adColumnId <= 0) return "";
 
 		EvaluationContext evalCtx = buildContext(ctx, WindowNo, mTab, mField, value);
 
 		FieldEventRuleEngine engine = new FieldEventRuleEngine();
 		FieldEventResult result;
 		try {
-			result = engine.evaluateUITrigger(adFieldId, evalCtx);
+			result = engine.evaluateUITrigger(adColumnId, evalCtx);
 		} catch (Exception e) {
-			log.warning("FieldEventRule evaluation failed for AD_Field_ID="
-					+ adFieldId + ": " + e.getMessage());
+			log.warning("FieldEventRule evaluation failed for AD_Column_ID="
+					+ adColumnId + ": " + e.getMessage());
 			return "";
 		}
 
