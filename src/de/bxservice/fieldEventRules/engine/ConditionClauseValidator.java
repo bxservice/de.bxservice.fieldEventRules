@@ -114,7 +114,7 @@ public class ConditionClauseValidator {
 		String sql = expression.substring(SQL_PREFIX.length()).trim();
 		sql = TOKEN_PATTERN.matcher(sql).replaceAll("NULL");
 		try {
-			DB.getSQLValueEx(null, sql);
+			DB.getSQLValueObjectsEx(null, sql);
 		} catch (Exception e) {
 			throw new AdempiereException(e.getMessage());
 		}
