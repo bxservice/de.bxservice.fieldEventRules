@@ -35,6 +35,7 @@ import org.compiere.util.DB;
 import org.compiere.util.Env;
 import org.compiere.util.Evaluatee;
 import org.compiere.util.Msg;
+import org.idempiere.expression.logic.LogicEvaluator;
 
 import de.bxservice.fieldEventRules.engine.ConditionClauseValidator.Format;
 import de.bxservice.fieldEventRules.model.MBXSFieldEventAction;
@@ -125,7 +126,7 @@ public class FieldEventRuleEngine {
 	}
 
 	private static boolean evaluateContextCondition(String condition, EvaluationContext ctx) {
-		return org.idempiere.expression.logic.LogicEvaluator.evaluateLogic(evaluateeFor(ctx), condition);
+		return LogicEvaluator.evaluateLogic(evaluateeFor(ctx), condition);
 	}
 
 	private boolean evaluateSQLCondition(String condition, EvaluationContext ctx) throws AdempiereException {
@@ -198,11 +199,34 @@ public class FieldEventRuleEngine {
 	}
 
 	private static Evaluatee evaluateeFor(EvaluationContext ctx) {
-		if (ctx.getPo() != null)
-			return ctx.getPo();
-		return variableName -> {
-			Object v = ctx.getCurrentValues().get(variableName);
-			return v != null ? v.toString() : "";
-		};
+		return variableName -> toLogicValue(resolveRawValue(variableName, ctx));
+	}
+
+	/**
+	 * Resolves the raw (untyped) value of a column from the PO or, on the UI
+	 * callout path (no PO available), from the current values map.
+	 */
+	private static Object resolveRawValue(String variableName, EvaluationContext ctx) {
+		PO po = ctx.getPo();
+		if (po != null) {
+			int idx = po.get_ColumnIndex(variableName);
+			return idx >= 0 ? po.get_Value(idx) : null;
+		}
+		return ctx.getCurrentValues().get(variableName);
+	}
+
+	/**
+	 * Normalizes a raw column value to the string form expected by
+	 * {@link LogicEvaluator} comparisons. Boolean (YesNo) columns are stored as
+	 * {@link Boolean} by both {@code PO} and {@code GridField}; without this
+	 * conversion {@code value.toString()} yields "true"/"false" instead of
+	 * "Y"/"N", silently breaking conditions like {@code @IsPurchased@='Y'}.
+	 */
+	private static String toLogicValue(Object value) {
+		if (value == null)
+			return "";
+		if (value instanceof Boolean)
+			return ((Boolean) value) ? "Y" : "N";
+		return value.toString();
 	}
 }

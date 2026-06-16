@@ -141,6 +141,9 @@ public class ExpressionEvaluator {
 			return value.toString();
 		if (value instanceof Timestamp)
 			return DB.TO_DATE((Timestamp) value, false);
+		// PO/GridField store YesNo columns as Boolean; SQL expects the 'Y'/'N' literal.
+		if (value instanceof Boolean)
+			return ((Boolean) value) ? "'Y'" : "'N'";
 		String s = value.toString();
 		return "'" + s.replace("'", "''") + "'";
 	}
