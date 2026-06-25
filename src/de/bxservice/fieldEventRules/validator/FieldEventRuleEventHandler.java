@@ -213,7 +213,7 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 			Object current = po.get_Value(a.getColumnName());
 			if (Objects.equals(current, a.getValue())) continue;
 
-			po.set_Value(a.getColumnName(), a.getValue());
+			po.set_ValueOfColumn(a.getColumnName(), a.getValue());
 			// Keep evalCtx in sync so later rules in this pass see the updated value
 			evalCtx.getCurrentValues().put(a.getColumnName(), a.getValue());
 		}
