@@ -44,7 +44,7 @@ public class MBXSFieldEventAction extends X_BXS_FieldEventAction {
 	public MBXSFieldEventAction(Properties ctx, ResultSet rs, String trxName) {
 		super(ctx, rs, trxName);
 	}
-	
+
 	@Override
 	protected boolean beforeSave(boolean newRecord) {
 		if (getSeqNo() == 0) {

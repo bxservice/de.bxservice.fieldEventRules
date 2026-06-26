@@ -67,6 +67,22 @@ public interface I_BXS_FieldEventAction
 	@Deprecated(since="13") // use better methods with cache
 	public org.compiere.model.I_AD_Column getAD_Column() throws RuntimeException;
 
+    /** Column name AD_Target_Table_ID */
+    public static final String COLUMNNAME_AD_Target_Table_ID = "AD_Target_Table_ID";
+
+	/** Set Target Table.
+	  * Table to create a new related record in (cross-table actions)
+	  */
+	public void setAD_Target_Table_ID (int AD_Target_Table_ID);
+
+	/** Get Target Table.
+	  * Table to create a new related record in (cross-table actions)
+	  */
+	public int getAD_Target_Table_ID();
+	
+
+
+
     /** Column name AD_Org_ID */
     public static final String COLUMNNAME_AD_Org_ID = "AD_Org_ID";
 

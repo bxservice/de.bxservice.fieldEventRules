@@ -43,6 +43,7 @@ public final class EvaluationContext {
 	private final GridTab gridTab;
 	private final Map<String, Object> currentValues;
 	private final Map<String, Object> resolvedParams;
+	private final boolean afterNew;
 
 	private EvaluationContext(Builder b) {
 		this.ctx = b.ctx;
@@ -50,6 +51,7 @@ public final class EvaluationContext {
 		this.gridTab = b.gridTab;
 		this.currentValues = new HashMap<>(b.currentValues);
 		this.resolvedParams = Collections.unmodifiableMap(new HashMap<>(b.resolvedParams));
+		this.afterNew = b.afterNew;
 	}
 
 	/** Returns the Env context, never null (falls back to empty Properties). */
@@ -79,6 +81,11 @@ public final class EvaluationContext {
 		return resolvedParams;
 	}
 
+	/** True when the triggering event is PO_AFTER_NEW (record just inserted). */
+	public boolean isAfterNew() {
+		return afterNew;
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -90,6 +97,7 @@ public final class EvaluationContext {
 		private GridTab gridTab;
 		private Map<String, Object> currentValues = new HashMap<>();
 		private Map<String, Object> resolvedParams = new HashMap<>();
+		private boolean afterNew = false;
 
 		public Builder ctx(Properties ctx) {
 			this.ctx = ctx;
@@ -113,6 +121,11 @@ public final class EvaluationContext {
 
 		public Builder resolvedParams(Map<String, Object> params) {
 			this.resolvedParams = new HashMap<>(params);
+			return this;
+		}
+
+		public Builder afterNew(boolean afterNew) {
+			this.afterNew = afterNew;
 			return this;
 		}
 
