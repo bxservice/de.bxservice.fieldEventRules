@@ -278,17 +278,28 @@ public class FieldEventRuleEngine {
 				continue;
 			}
 
-			PO relatedPo = targetTable.getPO(0, srcTrxName);
-			for (Map.Entry<String, Object> cv : colValues.entrySet()) {
-				if (relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
-					log.warning("Cross-table: column '" + cv.getKey() + "' not found in " + targetTable.getTableName());
-					continue;
-				}
-				relatedPo.set_Value(cv.getKey(), cv.getValue());
-			}
-
 			Savepoint sp = null;
 			try {
+				PO relatedPo = targetTable.getPO(0, srcTrxName);
+				if (relatedPo == null) {
+					String msg = "Cross-table action: could not create PO for " + targetTable.getTableName() + ".";
+					log.warning(msg);
+					result.addMessage(msg, "W", null);
+					continue;
+				}
+				boolean appliedAny = false;
+				for (Map.Entry<String, Object> cv : colValues.entrySet()) {
+					if (relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
+						String msg = "Cross-table: column '" + cv.getKey() + "' not found in " + targetTable.getTableName();
+						log.warning(msg);
+						result.addMessage(msg, "W", null);
+						continue;
+					}
+					relatedPo.set_Value(cv.getKey(), cv.getValue());
+					appliedAny = true;
+				}
+				if (!appliedAny)
+					continue;
 				if (trx != null) sp = trx.setSavepoint(null);
 				relatedPo.saveEx();
 			} catch (Exception e) {
@@ -311,12 +322,14 @@ public class FieldEventRuleEngine {
 	 * callout path (no PO available), from the current values map.
 	 */
 	private static Object resolveRawValue(String variableName, EvaluationContext ctx) {
+		if (ctx.getCurrentValues().containsKey(variableName))
+			return ctx.getCurrentValues().get(variableName);
 		PO po = ctx.getPo();
 		if (po != null) {
 			int idx = po.get_ColumnIndex(variableName);
 			return idx >= 0 ? po.get_Value(idx) : null;
 		}
-		return ctx.getCurrentValues().get(variableName);
+		return null;
 	}
 
 	/**
