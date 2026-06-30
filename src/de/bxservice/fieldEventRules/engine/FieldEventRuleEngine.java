@@ -81,10 +81,6 @@ public class FieldEventRuleEngine {
 		List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
 
 		FieldEventResult.Builder result = new FieldEventResult.Builder();
-		
-		//fauzan - 2026-06-26
-		
-		Map<Integer, Map<String, Object>> crossTable = new LinkedHashMap<>();
 
 		for (MBXSFieldEventRule rule : rules) {
 
@@ -99,16 +95,42 @@ public class FieldEventRuleEngine {
 			} else {
 				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
 				for (MBXSFieldEventAction action : actions) {
-					if (action.getAD_Target_Table_ID() > 0)
-						collectCrossTableAction(action, rule, ctx, crossTable);
-					else
+					if (action.getAD_Target_Table_ID() == 0)
 						applyAction(action, rule, ctx, result);
 				}
-					
 			}
 		}
-		
-		if (ctx.isAfterNew() && ctx.getPo() != null && !crossTable.isEmpty())
+
+		return result.build();
+	}
+
+	/**
+	 * Dedicated path for PO_AFTER_NEW: collects and applies cross-table actions
+	 * across all registered columns without re-running validations or
+	 * source-record assignments (which already ran on PO_BEFORE_NEW).
+	 */
+	public FieldEventResult evaluateAfterNewTrigger(List<Integer> columnIds, EvaluationContext ctx) {
+		FieldEventResult.Builder result = new FieldEventResult.Builder();
+		Map<Integer, Map<String, Object>> crossTable = new LinkedHashMap<>();
+
+		for (int adColumnId : columnIds) {
+			List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
+			for (MBXSFieldEventRule rule : rules) {
+				if (!matchesTrigger(rule.getTriggerEvent(), X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel))
+					continue;
+				if (X_BXS_FieldEventRule.BXS_RULETYPE_VALIDATE.equals(rule.getBXS_RuleType()))
+					continue;
+				if (!conditionPasses(rule, ctx))
+					continue;
+				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
+				for (MBXSFieldEventAction action : actions) {
+					if (action.getAD_Target_Table_ID() > 0)
+						collectCrossTableAction(action, rule, ctx, crossTable, result);
+				}
+			}
+		}
+
+		if (ctx.getPo() != null && !crossTable.isEmpty())
 			applyCrossTableRecords(crossTable, ctx, result);
 
 		return result.build();
@@ -218,58 +240,64 @@ public class FieldEventRuleEngine {
 		result.addMessage(msg, level, null);
 	}
 	
-	//fauzan 2026-06-26
-	private void collectCrossTableAction(MBXSFieldEventAction action, MBXSFieldEventRule rule, EvaluationContext ctx, 
-			Map<Integer, Map<String, Object>> crossTable) {
-		
-		if(!ctx.isAfterNew()) return;
+	private void collectCrossTableAction(MBXSFieldEventAction action, MBXSFieldEventRule rule, EvaluationContext ctx,
+			Map<Integer, Map<String, Object>> crossTable, FieldEventResult.Builder result) {
+		if (action.getAD_Column_ID() == 0) {
+			result.addMessage("Rule '" + rule.getName() + "': cross-table action has no Target Column, skipped.", "W", null);
+			return;
+		}
 		try {
-			//String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Target_Column_ID());
 			String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
+			if (colName == null) {
+				result.addMessage("Rule '" + rule.getName() + "': Target Column ID=" + action.getAD_Column_ID() + " not found, skipped.", "W", null);
+				return;
+			}
 			Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
 			crossTable.computeIfAbsent(action.getAD_Target_Table_ID(), k -> new LinkedHashMap<>()).put(colName, value);
 		} catch (Exception e) {
-			log.warning("Rule '" + rule.getName() + "' cross-table collect: " + e.getMessage());
+			String msg = "Rule '" + rule.getName() + "' cross-table collect failed: " + e.getMessage();
+			log.warning(msg);
+			result.addMessage(msg, "W", null);
 		}
-
 	}
     
-	//fauzan 2026-06-26
-	private void applyCrossTableRecords(Map<Integer, Map<String, Object>> crossTable, EvaluationContext ctx, 
+	private void applyCrossTableRecords(Map<Integer, Map<String, Object>> crossTable, EvaluationContext ctx,
 			FieldEventResult.Builder result) {
 		String srcTrxName = ctx.getPo().get_TrxName();
 		Trx trx = srcTrxName != null ? Trx.get(srcTrxName, false) : null;
-		
+
 		for (Map.Entry<Integer, Map<String, Object>> entry : crossTable.entrySet()) {
 			int targetTableId = entry.getKey();
 			Map<String, Object> colValues = entry.getValue();
-			
+
 			MTable targetTable = MTable.get(ctx.getCtx(), targetTableId);
 			if (targetTable == null || targetTable.getAD_Table_ID() == 0) {
-				log.warning("Cross-table action : target table ID=" + targetTableId + "Tidak Ditemukan.");
+				String msg = "Cross-table action: target table ID=" + targetTableId + " not found.";
+				log.warning(msg);
+				result.addMessage(msg, "W", null);
 				continue;
 			}
-			
+
 			PO relatedPo = targetTable.getPO(0, srcTrxName);
 			for (Map.Entry<String, Object> cv : colValues.entrySet()) {
-				if(relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
-					log.warning("Cross-table: kolom '" + cv.getKey() + "' Tidak ada di " + targetTable.getTableName());
+				if (relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
+					log.warning("Cross-table: column '" + cv.getKey() + "' not found in " + targetTable.getTableName());
 					continue;
 				}
 				relatedPo.set_Value(cv.getKey(), cv.getValue());
 			}
-			
+
 			Savepoint sp = null;
 			try {
 				if (trx != null) sp = trx.setSavepoint(null);
 				relatedPo.saveEx();
 			} catch (Exception e) {
 				if (trx != null && sp != null) {
-					try {trx.rollback(sp);} catch (Exception ignore) {
-					}
+					try { trx.rollback(sp); } catch (Exception rollbackEx) { log.warning("Savepoint rollback failed: " + rollbackEx.getMessage()); }
 				}
-				log.warning("Cross-table saveEx gagal di " + targetTable.getTableName() + ": " + e.getMessage());
-				result.addMessage("Gagal membuat record di " + ": " + e.getMessage(), "W", null);
+				String msg = "Cross-table saveEx failed for " + targetTable.getTableName() + ": " + e.getMessage();
+				log.warning(msg);
+				result.addMessage(msg, "W", null);
 			}
 		}
 	}

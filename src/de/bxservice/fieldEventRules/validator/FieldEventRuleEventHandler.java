@@ -143,13 +143,25 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 
 		String topic = event.getTopic();
 		boolean isAfterNew = IEventTopics.PO_AFTER_NEW.equals(topic);
-		boolean isNewRecord = IEventTopics.PO_BEFORE_NEW.equals(topic) || isAfterNew;
 
 		EvaluationContext evalCtx = buildContext(po, isAfterNew);
 		List<Integer> columnIds = resolveActiveColumnIds(po.get_TableName());
-
-		FieldEventResult combined = FieldEventResult.empty();
 		FieldEventRuleEngine engine = new FieldEventRuleEngine();
+
+		if (isAfterNew) {
+			// Cross-table-only path: skip validations and source-record assignments
+			// that already ran on PO_BEFORE_NEW.
+			FieldEventResult result = engine.evaluateAfterNewTrigger(columnIds, evalCtx);
+			result.getMessages().stream()
+					.filter(m -> "W".equals(m.getLevel()))
+					.map(ValidationMessage::getMessage)
+					.findFirst()
+					.ifPresent(msg -> log.saveWarning(msg, ""));
+			return;
+		}
+
+		boolean isNewRecord = IEventTopics.PO_BEFORE_NEW.equals(topic);
+		FieldEventResult combined = FieldEventResult.empty();
 
 		for (int adColumnId : columnIds) {
 			if (!isNewRecord) {
