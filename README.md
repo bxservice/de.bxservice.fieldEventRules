@@ -264,7 +264,7 @@ When an action has a **Target Table** set, the engine creates a new record in th
 - Each cross-table action sets one column on the new record. Add one action per column you want to populate.
 - All actions for the same Target Table are grouped into a single `INSERT` (one new record per target table per rule evaluation).
 - Cross-table actions only fire on `PO_AFTER_NEW` — when a brand-new record is created for the first time. Updates to existing records do not trigger cross-table actions.
-- If the insert fails (e.g. a constraint violation), the failure is reported as a warning on the source record; the source record itself is not rolled back.
+- If the insert fails (e.g. a constraint violation), the exception propagates and iDempiere rolls back the entire transaction — both the target insert and the source record save are undone together.
 
 > **Note:** Target Table is optional. When left blank, the action writes to the source record as normal.
 

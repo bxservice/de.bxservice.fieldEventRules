@@ -240,23 +240,15 @@ public class FieldEventRuleEngine {
 	
 	private void collectCrossTableAction(MBXSFieldEventAction action, MBXSFieldEventRule rule, EvaluationContext ctx,
 			Map<Integer, Map<String, Object>> crossTable, FieldEventResult.Builder result) {
-		if (action.getAD_Column_ID() == 0) {
-			result.addMessage("Rule '" + rule.getName() + "': cross-table action has no Target Column, skipped.", "W", null);
-			return;
-		}
-		try {
-			String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
-			if (colName == null) {
-				result.addMessage("Rule '" + rule.getName() + "': Target Column ID=" + action.getAD_Column_ID() + " not found, skipped.", "W", null);
-				return;
-			}
-			Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
-			crossTable.computeIfAbsent(action.getBXS_Target_Table_ID(), k -> new LinkedHashMap<>()).put(colName, value);
-		} catch (Exception e) {
-			String msg = "Rule '" + rule.getName() + "' cross-table collect failed: " + e.getMessage();
-			log.warning(msg);
-			result.addMessage(msg, "W", null);
-		}
+		if (action.getAD_Column_ID() == 0)
+			throw new AdempiereException("Rule '" + rule.getName() + "': cross-table action has no Target Column configured.");
+
+		String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
+		if (colName == null)
+			throw new AdempiereException("Rule '" + rule.getName() + "': Target Column ID=" + action.getAD_Column_ID() + " not found.");
+
+		Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
+		crossTable.computeIfAbsent(action.getBXS_Target_Table_ID(), k -> new LinkedHashMap<>()).put(colName, value);
 	}
     
 	private void applyCrossTableRecords(Map<Integer, Map<String, Object>> crossTable, EvaluationContext ctx,
