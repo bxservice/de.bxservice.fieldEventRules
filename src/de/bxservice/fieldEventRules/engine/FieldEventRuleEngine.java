@@ -25,11 +25,9 @@
 package de.bxservice.fieldEventRules.engine;
 
 import java.util.List;
-import java.sql.Savepoint;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.compiere.model.MTable;
-import org.compiere.util.Trx;
 import org.adempiere.exceptions.AdempiereException;
 import org.compiere.model.MColumn;
 import org.compiere.model.MMessage;
@@ -95,7 +93,7 @@ public class FieldEventRuleEngine {
 			} else {
 				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
 				for (MBXSFieldEventAction action : actions) {
-					if (action.getAD_Target_Table_ID() == 0)
+					if (action.getBXS_Target_Table_ID() == 0)
 						applyAction(action, rule, ctx, result);
 				}
 			}
@@ -124,7 +122,7 @@ public class FieldEventRuleEngine {
 					continue;
 				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
 				for (MBXSFieldEventAction action : actions) {
-					if (action.getAD_Target_Table_ID() > 0)
+					if (action.getBXS_Target_Table_ID() > 0)
 						collectCrossTableAction(action, rule, ctx, crossTable, result);
 				}
 			}
@@ -253,7 +251,7 @@ public class FieldEventRuleEngine {
 				return;
 			}
 			Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
-			crossTable.computeIfAbsent(action.getAD_Target_Table_ID(), k -> new LinkedHashMap<>()).put(colName, value);
+			crossTable.computeIfAbsent(action.getBXS_Target_Table_ID(), k -> new LinkedHashMap<>()).put(colName, value);
 		} catch (Exception e) {
 			String msg = "Rule '" + rule.getName() + "' cross-table collect failed: " + e.getMessage();
 			log.warning(msg);
@@ -264,52 +262,38 @@ public class FieldEventRuleEngine {
 	private void applyCrossTableRecords(Map<Integer, Map<String, Object>> crossTable, EvaluationContext ctx,
 			FieldEventResult.Builder result) {
 		String srcTrxName = ctx.getPo().get_TrxName();
-		Trx trx = srcTrxName != null ? Trx.get(srcTrxName, false) : null;
+		if (srcTrxName == null)
+			throw new AdempiereException("Cross-table actions require a transaction; source record has no active transaction.");
 
 		for (Map.Entry<Integer, Map<String, Object>> entry : crossTable.entrySet()) {
 			int targetTableId = entry.getKey();
 			Map<String, Object> colValues = entry.getValue();
 
 			MTable targetTable = MTable.get(ctx.getCtx(), targetTableId);
-			if (targetTable == null || targetTable.getAD_Table_ID() == 0) {
-				String msg = "Cross-table action: target table ID=" + targetTableId + " not found.";
-				log.warning(msg);
-				result.addMessage(msg, "W", null);
-				continue;
-			}
+			if (targetTable == null || targetTable.getAD_Table_ID() == 0)
+				throw new AdempiereException("Cross-table action: target table ID=" + targetTableId + " not found.");
 
-			Savepoint sp = null;
-			try {
-				PO relatedPo = targetTable.getPO(0, srcTrxName);
-				if (relatedPo == null) {
-					String msg = "Cross-table action: could not create PO for " + targetTable.getTableName() + ".";
-					log.warning(msg);
-					result.addMessage(msg, "W", null);
+			PO relatedPo = targetTable.getPO(0, srcTrxName);
+			if (relatedPo == null)
+				throw new AdempiereException("Cross-table action: could not create PO for " + targetTable.getTableName() + ".");
+
+			boolean appliedAny = false;
+			for (Map.Entry<String, Object> cv : colValues.entrySet()) {
+				if (relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
+					log.warning("Cross-table: column '" + cv.getKey() + "' not found in " + targetTable.getTableName() + ", skipping.");
 					continue;
 				}
-				boolean appliedAny = false;
-				for (Map.Entry<String, Object> cv : colValues.entrySet()) {
-					if (relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
-						String msg = "Cross-table: column '" + cv.getKey() + "' not found in " + targetTable.getTableName();
-						log.warning(msg);
-						result.addMessage(msg, "W", null);
-						continue;
-					}
-					relatedPo.set_Value(cv.getKey(), cv.getValue());
-					appliedAny = true;
-				}
-				if (!appliedAny)
-					continue;
-				if (trx != null) sp = trx.setSavepoint(null);
-				relatedPo.saveEx();
-			} catch (Exception e) {
-				if (trx != null && sp != null) {
-					try { trx.rollback(sp); } catch (Exception rollbackEx) { log.warning("Savepoint rollback failed: " + rollbackEx.getMessage()); }
-				}
-				String msg = "Cross-table saveEx failed for " + targetTable.getTableName() + ": " + e.getMessage();
-				log.warning(msg);
-				result.addMessage(msg, "W", null);
+				relatedPo.set_Value(cv.getKey(), cv.getValue());
+				appliedAny = true;
 			}
+			if (!appliedAny)
+				continue;
+
+			// Inherit AD_Org_ID from source PO if admin did not configure it explicitly
+			if (!colValues.containsKey("AD_Org_ID") && relatedPo.get_ColumnIndex("AD_Org_ID") >= 0)
+				relatedPo.set_Value("AD_Org_ID", ctx.getPo().get_Value("AD_Org_ID"));
+
+			relatedPo.saveEx(); // exception propagates — iDempiere core rolls back the transaction
 		}
 	}
 

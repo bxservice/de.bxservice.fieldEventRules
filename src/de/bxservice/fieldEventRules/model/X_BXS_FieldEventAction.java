@@ -229,22 +229,22 @@ public class X_BXS_FieldEventAction extends PO implements I_BXS_FieldEventAction
 	}
 
 	/** Set Target Table.
-		@param AD_Target_Table_ID Table to create a new related record in (used by cross-table actions)
+		@param BXS_Target_Table_ID Table to create a new related record in (used by cross-table actions)
 	*/
-	public void setAD_Target_Table_ID (int AD_Target_Table_ID)
+	public void setBXS_Target_Table_ID (int BXS_Target_Table_ID)
 	{
-		if (AD_Target_Table_ID < 1)
-			set_Value (COLUMNNAME_AD_Target_Table_ID, null);
+		if (BXS_Target_Table_ID < 1)
+			set_Value (COLUMNNAME_BXS_Target_Table_ID, null);
 		else
-			set_Value (COLUMNNAME_AD_Target_Table_ID, Integer.valueOf(AD_Target_Table_ID));
+			set_Value (COLUMNNAME_BXS_Target_Table_ID, Integer.valueOf(BXS_Target_Table_ID));
 	}
 
 	/** Get Target Table.
 		@return Table to create a new related record in (used by cross-table actions)
 	  */
-	public int getAD_Target_Table_ID()
+	public int getBXS_Target_Table_ID()
 	{
-		Integer ii = (Integer)get_Value(COLUMNNAME_AD_Target_Table_ID);
+		Integer ii = (Integer)get_Value(COLUMNNAME_BXS_Target_Table_ID);
 		if (ii == null)
 			 return 0;
 		return ii.intValue();
