@@ -269,17 +269,12 @@ public class FieldEventRuleEngine {
 			if (relatedPo == null)
 				throw new AdempiereException("Cross-table action: could not create PO for " + targetTable.getTableName() + ".");
 
-			boolean appliedAny = false;
 			for (Map.Entry<String, Object> cv : colValues.entrySet()) {
-				if (relatedPo.get_ColumnIndex(cv.getKey()) < 0) {
-					log.warning("Cross-table: column '" + cv.getKey() + "' not found in " + targetTable.getTableName() + ", skipping.");
-					continue;
-				}
+				if (relatedPo.get_ColumnIndex(cv.getKey()) < 0)
+					throw new AdempiereException("Cross-table action: column '" + cv.getKey()
+							+ "' not found in " + targetTable.getTableName() + ". Check the Target Column configuration.");
 				relatedPo.set_Value(cv.getKey(), cv.getValue());
-				appliedAny = true;
 			}
-			if (!appliedAny)
-				continue;
 
 			// Inherit AD_Org_ID from source PO if admin did not configure it explicitly
 			if (!colValues.containsKey("AD_Org_ID") && relatedPo.get_ColumnIndex("AD_Org_ID") >= 0)
