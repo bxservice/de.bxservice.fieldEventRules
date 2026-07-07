@@ -15,6 +15,7 @@ Think of it as a lightweight form event system: you attach rules to fields or co
 - **Copy values between fields** — when an Org is selected, default the Warehouse from that org's configuration.
 - **Conditional defaults** — set a field only when it is currently blank, leaving intentional values untouched.
 - **Validate data** — show an error or warning when a value breaks a business rule, either immediately when the field is changed or when the record is saved.
+- **Auto-create related records** — when a new record is saved, automatically create a related record in a different table (e.g., grant default org access when a user is created).
 
 All of these work whether the record is created through a window, a background process, a data import, or the API.
 
@@ -245,6 +246,62 @@ Action:
 | Type | SET |
 | Target | `IsDropShip` |
 | Expression | `'Y'` |
+
+---
+
+### Cross-table actions (create records in another table)
+
+When an action has a **Target Table** set, the engine creates a new record in that table instead of writing a value back to the source record. This lets you auto-create related records as a side-effect of saving.
+
+| Field | What it does |
+|---|---|
+| Target Table | The table to create a new record in |
+| Target Column | The column to set on the new record. When Target Table is filled, the dropdown shows columns from the target table; when empty, it shows columns from the source table (standard behavior) |
+| Value Expression | The value to set on the target column. Use `@ColumnName@` to reference values from the source record |
+
+**How it works:**
+
+- Each cross-table action sets one column on the new record. Add one action per column you want to populate.
+- All actions for the same Target Table are grouped into a single `INSERT` (one new record per target table per rule evaluation).
+- Cross-table actions only fire on `PO_AFTER_NEW` — when a brand-new record is created for the first time. Updates to existing records do not trigger cross-table actions.
+- If the insert fails (e.g. a constraint violation), the exception propagates and iDempiere rolls back the entire transaction — both the target insert and the source record save are undone together.
+
+> **Note:** Target Table is optional. When left blank, the action writes to the source record as normal.
+
+---
+
+### Example 4 — Auto-grant org access when a new user is created
+
+When a new `AD_User` is saved, automatically create an `AD_User_OrgAccess` record that gives the user access to the same org.
+
+Rule:
+
+| Field | Value |
+|---|---|
+| Table | AD_User |
+| Column | Name |
+| Trigger | On save (model) |
+| Rule Type | SET (data consequence) |
+
+Action 1 — set the user reference:
+
+| Field | Value |
+|---|---|
+| Action Type | SET |
+| Target Table | AD_User_OrgAccess |
+| Target Column | AD_User_ID |
+| Value Expression | `@AD_User_ID@` |
+
+Action 2 — set the org:
+
+| Field | Value |
+|---|---|
+| Action Type | SET |
+| Target Table | AD_User_OrgAccess |
+| Target Column | AD_Org_ID |
+| Value Expression | `@AD_Org_ID@` |
+
+When a new user is saved, one `AD_User_OrgAccess` record is created automatically with the user's ID and their default org.
 
 ---
 

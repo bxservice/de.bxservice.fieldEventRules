@@ -25,7 +25,9 @@
 package de.bxservice.fieldEventRules.engine;
 
 import java.util.List;
-
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.compiere.model.MTable;
 import org.adempiere.exceptions.AdempiereException;
 import org.compiere.model.MColumn;
 import org.compiere.model.MMessage;
@@ -90,10 +92,44 @@ public class FieldEventRuleEngine {
 				applyValidation(rule, result);
 			} else {
 				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
-				for (MBXSFieldEventAction action : actions)
-					applyAction(action, rule, ctx, result);
+				for (MBXSFieldEventAction action : actions) {
+					if (action.getBXS_Target_Table_ID() == 0)
+						applyAction(action, rule, ctx, result);
+				}
 			}
 		}
+
+		return result.build();
+	}
+
+	/**
+	 * Dedicated path for PO_AFTER_NEW: collects and applies cross-table actions
+	 * across all registered columns without re-running validations or
+	 * source-record assignments (which already ran on PO_BEFORE_NEW).
+	 */
+	public FieldEventResult evaluateAfterNewTrigger(List<Integer> columnIds, EvaluationContext ctx) {
+		FieldEventResult.Builder result = new FieldEventResult.Builder();
+		Map<Integer, Map<String, Object>> crossTable = new LinkedHashMap<>();
+
+		for (int adColumnId : columnIds) {
+			List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
+			for (MBXSFieldEventRule rule : rules) {
+				if (!matchesTrigger(rule.getTriggerEvent(), X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel))
+					continue;
+				if (X_BXS_FieldEventRule.BXS_RULETYPE_VALIDATE.equals(rule.getBXS_RuleType()))
+					continue;
+				if (!conditionPasses(rule, ctx))
+					continue;
+				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
+				for (MBXSFieldEventAction action : actions) {
+					if (action.getBXS_Target_Table_ID() > 0)
+						collectCrossTableAction(action, rule, ctx, crossTable, result);
+				}
+			}
+		}
+
+		if (ctx.getPo() != null && !crossTable.isEmpty())
+			applyCrossTableRecords(crossTable, ctx, result);
 
 		return result.build();
 	}
@@ -158,17 +194,21 @@ public class FieldEventRuleEngine {
 			String actionType = action.getBXS_ActionType();
 
 			if (X_BXS_FieldEventAction.BXS_ACTIONTYPE_CLEAR.equals(actionType)) {
-				result.addAssignment(colName, null);
+				if (!ctx.isAfterNew())
+					result.addAssignment(colName, null);
 
 			} else if (X_BXS_FieldEventAction.BXS_ACTIONTYPE_SET.equals(actionType)) {
-				Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
-				result.addAssignment(colName, value);
-
-			} else if (X_BXS_FieldEventAction.BXS_ACTIONTYPE_SETIFBLANK.equals(actionType)) {
-				Object current = ctx.getCurrentValues().get(colName);
-				if (current == null || "".equals(current)) {
+				if (!ctx.isAfterNew()) {
 					Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
 					result.addAssignment(colName, value);
+				}
+			} else if (X_BXS_FieldEventAction.BXS_ACTIONTYPE_SETIFBLANK.equals(actionType)) {
+				if (!ctx.isAfterNew()) {
+					Object current = ctx.getCurrentValues().get(colName);
+					if (current == null || "".equals(current)) {
+						Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
+						result.addAssignment(colName, value);
+					}
 				}
 			}
 
@@ -197,6 +237,52 @@ public class FieldEventRuleEngine {
 
 		result.addMessage(msg, level, null);
 	}
+	
+	private void collectCrossTableAction(MBXSFieldEventAction action, MBXSFieldEventRule rule, EvaluationContext ctx,
+			Map<Integer, Map<String, Object>> crossTable, FieldEventResult.Builder result) {
+		if (action.getAD_Column_ID() == 0)
+			throw new AdempiereException("Rule '" + rule.getName() + "': cross-table action has no Target Column configured.");
+
+		String colName = MColumn.getColumnName(ctx.getCtx(), action.getAD_Column_ID());
+		if (colName == null)
+			throw new AdempiereException("Rule '" + rule.getName() + "': Target Column ID=" + action.getAD_Column_ID() + " not found.");
+
+		Object value = evaluator.evaluate(action.getBXS_ValueExpression(), ctx);
+		crossTable.computeIfAbsent(action.getBXS_Target_Table_ID(), k -> new LinkedHashMap<>()).put(colName, value);
+	}
+    
+	private void applyCrossTableRecords(Map<Integer, Map<String, Object>> crossTable, EvaluationContext ctx,
+			FieldEventResult.Builder result) {
+		String srcTrxName = ctx.getPo().get_TrxName();
+		if (srcTrxName == null)
+			throw new AdempiereException("Cross-table actions require a transaction; source record has no active transaction.");
+
+		for (Map.Entry<Integer, Map<String, Object>> entry : crossTable.entrySet()) {
+			int targetTableId = entry.getKey();
+			Map<String, Object> colValues = entry.getValue();
+
+			MTable targetTable = MTable.get(ctx.getCtx(), targetTableId);
+			if (targetTable == null || targetTable.getAD_Table_ID() == 0)
+				throw new AdempiereException("Cross-table action: target table ID=" + targetTableId + " not found.");
+
+			PO relatedPo = targetTable.getPO(0, srcTrxName);
+			if (relatedPo == null)
+				throw new AdempiereException("Cross-table action: could not create PO for " + targetTable.getTableName() + ".");
+
+			for (Map.Entry<String, Object> cv : colValues.entrySet()) {
+				if (relatedPo.get_ColumnIndex(cv.getKey()) < 0)
+					throw new AdempiereException("Cross-table action: column '" + cv.getKey()
+							+ "' not found in " + targetTable.getTableName() + ". Check the Target Column configuration.");
+				relatedPo.set_Value(cv.getKey(), cv.getValue());
+			}
+
+			// Inherit AD_Org_ID from source PO if admin did not configure it explicitly
+			if (!colValues.containsKey("AD_Org_ID") && relatedPo.get_ColumnIndex("AD_Org_ID") >= 0)
+				relatedPo.set_Value("AD_Org_ID", ctx.getPo().get_Value("AD_Org_ID"));
+
+			relatedPo.saveEx(); // exception propagates — iDempiere core rolls back the transaction
+		}
+	}
 
 	private static Evaluatee evaluateeFor(EvaluationContext ctx) {
 		return variableName -> toLogicValue(resolveRawValue(variableName, ctx));
@@ -207,12 +293,14 @@ public class FieldEventRuleEngine {
 	 * callout path (no PO available), from the current values map.
 	 */
 	private static Object resolveRawValue(String variableName, EvaluationContext ctx) {
+		if (ctx.getCurrentValues().containsKey(variableName))
+			return ctx.getCurrentValues().get(variableName);
 		PO po = ctx.getPo();
 		if (po != null) {
 			int idx = po.get_ColumnIndex(variableName);
 			return idx >= 0 ? po.get_Value(idx) : null;
 		}
-		return ctx.getCurrentValues().get(variableName);
+		return null;
 	}
 
 	/**

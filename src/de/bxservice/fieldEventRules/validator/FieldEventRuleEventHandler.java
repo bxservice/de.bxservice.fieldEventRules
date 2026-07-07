@@ -106,6 +106,7 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 				String tableName = rs.getString(1);
 				if (registeredTables.add(tableName)) {
 					registerTableEvent(IEventTopics.PO_BEFORE_NEW, tableName);
+					registerTableEvent(IEventTopics.PO_AFTER_NEW, tableName);
 					registerTableEvent(IEventTopics.PO_BEFORE_CHANGE, tableName);
 					count++;
 				}
@@ -125,6 +126,7 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 				String tableName = rs.getString(1);
 				if (registeredTables.add(tableName)) {
 					registerTableEvent(IEventTopics.PO_BEFORE_NEW, tableName);
+					registerTableEvent(IEventTopics.PO_AFTER_NEW, tableName);
 					registerTableEvent(IEventTopics.PO_BEFORE_CHANGE, tableName);
 					log.info("FieldEventRuleEventHandler: registered new table " + tableName);
 				}
@@ -139,12 +141,27 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 		PO po = getPO(event);
 		if (po == null) return;
 
-		EvaluationContext evalCtx = buildContext(po);
-		List<Integer> columnIds = resolveActiveColumnIds(po.get_TableName());
+		String topic = event.getTopic();
+		boolean isAfterNew = IEventTopics.PO_AFTER_NEW.equals(topic);
 
-		FieldEventResult combined = FieldEventResult.empty();
+		EvaluationContext evalCtx = buildContext(po, isAfterNew);
+		List<Integer> columnIds = resolveActiveColumnIds(po.get_TableName());
 		FieldEventRuleEngine engine = new FieldEventRuleEngine();
-		boolean isNewRecord = IEventTopics.PO_BEFORE_NEW.equals(event.getTopic());
+
+		if (isAfterNew) {
+			// Cross-table-only path: skip validations and source-record assignments
+			// that already ran on PO_BEFORE_NEW.
+			FieldEventResult result = engine.evaluateAfterNewTrigger(columnIds, evalCtx);
+			result.getMessages().stream()
+					.filter(m -> "W".equals(m.getLevel()))
+					.map(ValidationMessage::getMessage)
+					.findFirst()
+					.ifPresent(msg -> log.saveWarning(msg, ""));
+			return;
+		}
+
+		boolean isNewRecord = IEventTopics.PO_BEFORE_NEW.equals(topic);
+		FieldEventResult combined = FieldEventResult.empty();
 
 		for (int adColumnId : columnIds) {
 			if (!isNewRecord) {
@@ -179,13 +196,14 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 				.ifPresent(msg -> { throw new AdempiereException(msg); });
 	}
 
-	static EvaluationContext buildContext(PO po) {
+	static EvaluationContext buildContext(PO po, boolean isAfterNew) {
 		return EvaluationContext.builder()
 				.ctx(po.getCtx())
 				.po(po)
 				.gridTab(null)
 				.currentValues(extractCurrentValues(po))
 				.resolvedParams(Collections.emptyMap())
+				.afterNew(isAfterNew)
 				.build();
 	}
 
@@ -197,6 +215,13 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 			Object value = po.get_Value(i);
 			if (name != null)
 				values.put(name, value);
+		}
+		// PO.get_Value() returns null for PK of a new record (ID stored in m_IDs, not m_newValues).
+		// Override so @PK_Column@ tokens resolve correctly in cross-table action expressions.
+		if (po.get_ID() > 0) {
+			String[] keyColumns = po.get_KeyColumns();
+			if (keyColumns != null && keyColumns.length == 1)
+				values.put(keyColumns[0], po.get_ID());
 		}
 		return values;
 	}
