@@ -31,7 +31,7 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
 	/**
 	 *
 	 */
-	private static final long serialVersionUID = 20260527L;
+	private static final long serialVersionUID = 20260707L;
 
     /** Standard Constructor */
     public X_BXS_FieldEventRule (Properties ctx, int BXS_FieldEventRule_ID, String trxName)
@@ -303,10 +303,10 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
 		return (String)get_Value(COLUMNNAME_BXS_Condition);
 	}
 
-	/** Error (block save) = E */
-	public static final String BXS_ERRORLEVEL_ErrorBlockSave = "E";
-	/** Warning (allow continue) = W */
-	public static final String BXS_ERRORLEVEL_WarningAllowContinue = "W";
+	/** Error = E */
+	public static final String BXS_ERRORLEVEL_Error = "E";
+	/** Warning = W */
+	public static final String BXS_ERRORLEVEL_Warning = "W";
 	/** Set Error Level.
 		@param BXS_ErrorLevel Error Level
 	*/
@@ -431,14 +431,16 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
 		return ii.intValue();
 	}
 
-	/** Both = B */
-	public static final String TRIGGEREVENT_Both = "B";
+	/** After New = A */
+	public static final String TRIGGEREVENT_AfterNew = "A";
+	/** UI &amp; Save = B */
+	public static final String TRIGGEREVENT_UISave = "B";
 	/** On Save (model) = S */
 	public static final String TRIGGEREVENT_OnSaveModel = "S";
-	/** UI = U */
-	public static final String TRIGGEREVENT_UI = "U";
+	/** UI (callout) = U */
+	public static final String TRIGGEREVENT_UICallout = "U";
 	/** Set Trigger Event.
-		@param TriggerEvent On field change (UI), On save (model), Both
+		@param TriggerEvent After New, On field change (UI), On save (model), UI &amp; Save
 	*/
 	public void setTriggerEvent (String TriggerEvent)
 	{
@@ -447,7 +449,7 @@ public class X_BXS_FieldEventRule extends PO implements I_BXS_FieldEventRule, I_
 	}
 
 	/** Get Trigger Event.
-		@return On field change (UI), On save (model), Both
+		@return After New, On field change (UI), On save (model), UI &amp; Save
 	  */
 	public String getTriggerEvent()
 	{

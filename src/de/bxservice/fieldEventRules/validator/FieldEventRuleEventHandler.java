@@ -83,7 +83,7 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 			+ " JOIN AD_Table t ON t.AD_Table_ID = r.AD_Table_ID"
 			+ " WHERE r.IsActive     = 'Y'"
 			+ "   AND r.AD_Column_ID IS NOT NULL"
-			+ "   AND r.TriggerEvent IN ('S', 'B')";
+			+ "   AND r.TriggerEvent IN ('S', 'B', 'A')";
 
 	@Override
 	protected void initialize() {

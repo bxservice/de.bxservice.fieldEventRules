@@ -28,7 +28,8 @@ A Field Event Rule sits between a field (or column) and a piece of logic you def
 **1. Trigger** — when does it fire?
 - *On field change* (UI / callout) — fires immediately in the UI when a user leaves the field, the same moment a callout would. Does not fire on background saves.
 - *On save* (model) — fires when the record is being saved, regardless of how it was created. Runs after the user clicks Save, or when a process/import writes the record.
-- *Both* — fires at both moments, so the UI stays responsive and data consistency is guaranteed for non-UI operations too.
+- *UI & Save* — fires at both moments, so the UI stays responsive and data consistency is guaranteed for non-UI operations too.
+- *After New* — fires once, right after a brand-new record has been inserted and has an ID. Dedicated to [cross-table actions](#cross-table-actions-create-records-in-another-table); source-record assignments and validations are not evaluated on this trigger.
 
 **2. Condition** *(optional)* — should it fire this time?
 An optional guard expression. If it evaluates to false, the rule is skipped entirely. Useful for rules that only apply in certain situations (e.g. only on Sales Orders, only when the amount exceeds a threshold).
@@ -49,7 +50,7 @@ Each rule record has:
 | Name | A label for the rule, shown in lists |
 | Window / Tab / Field | Scope the rule to a specific place in the UI. Leave blank to apply model-wide. |
 | Table / Column | Attach the rule at the column level so it fires for any window using that column. |
-| Trigger | On field change / On save / Both |
+| Trigger | On field change / On save / UI & Save / After New |
 | Execution scope | UI only / Model only / Both |
 | Condition | Optional guard (see Conditions below) |
 | Rule type | SET (data consequence) or VALIDATE |
@@ -68,7 +69,7 @@ Rules can be scoped at two levels and you can combine them.
 
 **Column-level scope** (model-wide): attach a rule to a column on a table. The rule fires whenever any record on that table is saved, regardless of which window was used — or even if no window was involved. Use this for data integrity rules that must hold universally.
 
-If you want a rule to do both — show responsive feedback in the UI *and* enforce the consequence on save — set the Trigger to "Both" and the Execution Scope to "Both". The engine avoids double-applying the same value when the UI path already set it.
+If you want a rule to do both — show responsive feedback in the UI *and* enforce the consequence on save — set the Trigger to "UI & Save" and the Execution Scope to "Both". The engine avoids double-applying the same value when the UI path already set it.
 
 > **Window field left blank** — if you leave the Window (and Tab / Field) blank, the rule applies to every window that uses the configured table/column. Use this when the logic should be universal rather than window-specific.
 
@@ -261,9 +262,10 @@ When an action has a **Target Table** set, the engine creates a new record in th
 
 **How it works:**
 
+- Cross-table actions require the rule's **Trigger** to be set to **After New**. That is what causes the rule to be evaluated on `PO_AFTER_NEW` — when a brand-new record has just been inserted and has an ID. A rule with any other Trigger (On field change, On save, UI & Save) never runs its cross-table actions, even if a Target Table is configured.
 - Each cross-table action sets one column on the new record. Add one action per column you want to populate.
 - All actions for the same Target Table are grouped into a single `INSERT` (one new record per target table per rule evaluation).
-- Cross-table actions only fire on `PO_AFTER_NEW` — when a brand-new record is created for the first time. Updates to existing records do not trigger cross-table actions.
+- Only insert — updates to existing records do not trigger cross-table actions.
 - If the insert fails (e.g. a constraint violation), the exception propagates and iDempiere rolls back the entire transaction — both the target insert and the source record save are undone together.
 
 > **Note:** Target Table is optional. When left blank, the action writes to the source record as normal.
@@ -280,7 +282,7 @@ Rule:
 |---|---|
 | Table | AD_User |
 | Column | Name |
-| Trigger | On save (model) |
+| Trigger | After New |
 | Rule Type | SET (data consequence) |
 
 Action 1 — set the user reference:

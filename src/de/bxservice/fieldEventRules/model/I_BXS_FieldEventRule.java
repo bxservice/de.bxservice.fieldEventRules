@@ -32,7 +32,7 @@ public interface I_BXS_FieldEventRule
     /** TableName=BXS_FieldEventRule */
     public static final String Table_Name = "BXS_FieldEventRule";
 
-    /** AD_Table_ID=1000040 */
+    /** AD_Table_ID=1000000 */
     public static final int Table_ID = MTable.getTable_ID(Table_Name);
 
     KeyNamePair Model = new KeyNamePair(Table_ID, Table_Name);
@@ -291,12 +291,14 @@ Y&#039;
     public static final String COLUMNNAME_TriggerEvent = "TriggerEvent";
 
 	/** Set Trigger Event.
-	  * On field change (UI), On save (model), Both
+	  * After New, On field change (UI), On save (model), UI &amp;
+ Save
 	  */
 	public void setTriggerEvent (String TriggerEvent);
 
 	/** Get Trigger Event.
-	  * On field change (UI), On save (model), Both
+	  * After New, On field change (UI), On save (model), UI &amp;
+ Save
 	  */
 	public String getTriggerEvent();
 

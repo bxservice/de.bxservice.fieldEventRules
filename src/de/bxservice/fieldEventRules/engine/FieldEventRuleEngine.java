@@ -70,7 +70,7 @@ public class FieldEventRuleEngine {
 	private final ExpressionEvaluator evaluator = new ExpressionEvaluator();
 
 	public FieldEventResult evaluateUITrigger(int adColumnId, EvaluationContext ctx) {
-		return evaluate(adColumnId, X_BXS_FieldEventRule.TRIGGEREVENT_UI, ctx);
+		return evaluate(adColumnId, X_BXS_FieldEventRule.TRIGGEREVENT_UICallout, ctx);
 	}
 
 	public FieldEventResult evaluateSaveTrigger(int adColumnId, EvaluationContext ctx) {
@@ -116,7 +116,7 @@ public class FieldEventRuleEngine {
 		for (int adColumnId : columnIds) {
 			List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
 			for (MBXSFieldEventRule rule : rules) {
-				if (!matchesTrigger(rule.getTriggerEvent(), X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel))
+				if (!X_BXS_FieldEventRule.TRIGGEREVENT_AfterNew.equals(rule.getTriggerEvent()))
 					continue;
 				if (X_BXS_FieldEventRule.BXS_RULETYPE_VALIDATE.equals(rule.getBXS_RuleType()))
 					continue;
@@ -139,7 +139,7 @@ public class FieldEventRuleEngine {
 	}
 
 	private static boolean matchesTrigger(String ruleEvent, String triggerPath) {
-		return triggerPath.equals(ruleEvent) || X_BXS_FieldEventRule.TRIGGEREVENT_Both.equals(ruleEvent);
+		return triggerPath.equals(ruleEvent) || X_BXS_FieldEventRule.TRIGGEREVENT_UISave.equals(ruleEvent);
 	}
 
 	private boolean conditionPasses(MBXSFieldEventRule rule, EvaluationContext ctx) {
@@ -224,7 +224,7 @@ public class FieldEventRuleEngine {
 	private static void applyValidation(MBXSFieldEventRule rule, FieldEventResult.Builder result) {
 		String level = rule.getBXS_ErrorLevel();
 		if (level == null || level.isBlank())
-			level = X_BXS_FieldEventRule.BXS_ERRORLEVEL_ErrorBlockSave;
+			level = X_BXS_FieldEventRule.BXS_ERRORLEVEL_Error;
 
 		String msg = null;
 		MMessage message = MMessage.get(Env.getCtx(), rule.getAD_Message_ID());

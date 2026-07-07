@@ -54,7 +54,7 @@ public class FieldEventRuleCache {
 			+ " WHERE t.TableName    = ?"
 			+ "   AND r.IsActive     = 'Y'"
 			+ "   AND r.AD_Column_ID IS NOT NULL"
-			+ "   AND r.TriggerEvent IN ('S', 'B')"
+			+ "   AND r.TriggerEvent IN ('S', 'B', 'A')"
 			+ " ORDER BY r.SeqNo";
 
 	private static final CCache<Integer, List<MBXSFieldEventRule>> rulesByColumnId =
