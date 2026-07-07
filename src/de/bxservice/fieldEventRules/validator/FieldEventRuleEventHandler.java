@@ -57,6 +57,7 @@ import de.bxservice.fieldEventRules.engine.FieldEventResult.FieldAssignment;
 import de.bxservice.fieldEventRules.engine.FieldEventResult.ValidationMessage;
 import de.bxservice.fieldEventRules.engine.FieldEventRuleCache;
 import de.bxservice.fieldEventRules.engine.FieldEventRuleEngine;
+import de.bxservice.fieldEventRules.model.MBXSFieldEventRule;
 
 @Component(
 		reference = @Reference(
@@ -82,7 +83,6 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 			+ " FROM BXS_FieldEventRule r"
 			+ " JOIN AD_Table t ON t.AD_Table_ID = r.AD_Table_ID"
 			+ " WHERE r.IsActive     = 'Y'"
-			+ "   AND r.AD_Column_ID IS NOT NULL"
 			+ "   AND r.TriggerEvent IN ('S', 'B', 'A')";
 
 	@Override
@@ -145,12 +145,14 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 
 		EvaluationContext evalCtx = buildContext(po);
 		List<Integer> columnIds = resolveActiveColumnIds(po.get_TableName());
+		List<MBXSFieldEventRule> columnlessRules =
+				FieldEventRuleCache.get().getColumnlessRulesByTableId(po.get_Table_ID());
 		FieldEventRuleEngine engine = new FieldEventRuleEngine();
 
 		if (IEventTopics.PO_AFTER_NEW.equals(topic)) {
 			// Cross-table-only path: skip validations and source-record assignments
 			// that already ran on PO_BEFORE_NEW. Errors propagate and roll back.
-			engine.evaluateAfterNewTrigger(columnIds, evalCtx);
+			engine.evaluateAfterNewTrigger(columnIds, columnlessRules, evalCtx);
 			return;
 		}
 
@@ -175,6 +177,19 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 			applyAssignments(result, po, evalCtx);
 			combined = merge(combined, result);
 			if (combined.hasBlockingError()) break;
+		}
+
+		// Column-less rules have no watch field, so they always run on save
+		// (insert and update), regardless of which columns changed.
+		if (!columnlessRules.isEmpty() && !combined.hasBlockingError()) {
+			try {
+				FieldEventResult result = engine.evaluateColumnlessSaveTrigger(columnlessRules, evalCtx);
+				applyAssignments(result, po, evalCtx);
+				combined = merge(combined, result);
+			} catch (Exception e) {
+				log.warning("FieldEventRule column-less save evaluation failed for table="
+						+ po.get_TableName() + ": " + e.getMessage());
+			}
 		}
 
 		combined.getMessages().stream()

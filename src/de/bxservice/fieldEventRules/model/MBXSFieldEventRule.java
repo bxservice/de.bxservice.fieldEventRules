@@ -92,6 +92,16 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 				setAD_Table_ID(col.getAD_Table_ID());
 		}
 
+		// AD_Column_ID may be NULL only for model-level triggers (On Save / AFTER NEW),
+		// where the rule runs on every save. UI-based triggers (UI callout / UI & Save)
+		// attach a callout to a field, so they always require a column.
+		boolean columnOptional = TRIGGEREVENT_OnSaveModel.equals(getTriggerEvent())
+				|| TRIGGEREVENT_AfterNew.equals(getTriggerEvent());
+		if (!columnOptional && getAD_Column_ID() == 0) {
+			log.saveError("FillMandatory", Msg.getElement(getCtx(), COLUMNNAME_AD_Column_ID));
+			return false;
+		}
+
 		// Either AD_Window_ID or AD_Table_ID must be filled
 		if (getAD_Window_ID() == 0 && getAD_Table_ID() == 0) {
 			log.saveError("FillMandatory",

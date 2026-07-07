@@ -27,9 +27,11 @@ A Field Event Rule sits between a field (or column) and a piece of logic you def
 
 **1. Trigger** — when does it fire?
 - *On field change* (UI / callout) — fires immediately in the UI when a user leaves the field, the same moment a callout would. Does not fire on background saves.
-- *On save* (model) — fires when the record is being saved, regardless of how it was created. Runs after the user clicks Save, or when a process/import writes the record.
+- *On save* (model) — fires when the record is being saved, regardless of how it was created. With a Field/Column set, it fires only when that field's value actually changes; with no Field/Column, it fires on **every** save (see [Firing on every save](#firing-on-every-save-no-watch-field) below).
 - *UI & Save* — fires at both moments, so the UI stays responsive and data consistency is guaranteed for non-UI operations too.
 - *After New* — fires once, right after a brand-new record has been inserted and has an ID. Dedicated to [cross-table actions](#cross-table-actions-create-records-in-another-table); source-record assignments and validations are not evaluated on this trigger.
+
+> **Field/Column is optional for *On save* and *After New*.** These are model-level triggers, so they can run without watching a specific field. For *On field change* and *UI & Save*, a Field/Column is required — the rule attaches a UI callout, which must be bound to a field.
 
 **2. Condition** *(optional)* — should it fire this time?
 An optional guard expression. If it evaluates to false, the rule is skipped entirely. Useful for rules that only apply in certain situations (e.g. only on Sales Orders, only when the amount exceeds a threshold).
@@ -49,7 +51,7 @@ Each rule record has:
 |---|---|
 | Name | A label for the rule, shown in lists |
 | Window / Tab / Field | Scope the rule to a specific place in the UI. Leave blank to apply model-wide. |
-| Table / Column | Attach the rule at the column level so it fires for any window using that column. |
+| Table / Column | Attach the rule at the column level so it fires for any window using that column. Column is optional for the *On save* and *After New* triggers — leave it blank to fire on every save (see [Firing on every save](#firing-on-every-save-no-watch-field)). |
 | Trigger | On field change / On save / UI & Save / After New |
 | Execution scope | UI only / Model only / Both |
 | Condition | Optional guard (see Conditions below) |
@@ -72,6 +74,19 @@ Rules can be scoped at two levels and you can combine them.
 If you want a rule to do both — show responsive feedback in the UI *and* enforce the consequence on save — set the Trigger to "UI & Save" and the Execution Scope to "Both". The engine avoids double-applying the same value when the UI path already set it.
 
 > **Window field left blank** — if you leave the Window (and Tab / Field) blank, the rule applies to every window that uses the configured table/column. Use this when the logic should be universal rather than window-specific.
+
+### Firing on every save (no watch field)
+
+Column-level rules normally fire when the watched column changes. Sometimes you want a rule that runs on **every** save of a table, no matter which fields were touched — for example a validation that must always hold, or a data consequence that should always be recomputed.
+
+To do this, set the **Table** but leave **Column** (and Field) blank, and choose a model-level trigger:
+
+- **On save** with no Column → the rule runs on every insert *and* every update of the table.
+- **After New** with no Column → the rule runs on every insert (for [cross-table actions](#cross-table-actions-create-records-in-another-table)).
+
+This works for both **SET** and **VALIDATE** rule types. Because there is no field to bind a UI callout to, a blank Column is only allowed for these model-level triggers — *On field change* and *UI & Save* still require a Column, and the configuration screen will block saving a rule that leaves it empty for those triggers.
+
+> **Performance note:** an every-save rule is evaluated on every save of the table. Keep its Condition and expressions lightweight, and use the Condition to short-circuit cases the rule does not apply to.
 
 ---
 
@@ -304,6 +319,31 @@ Action 2 — set the org:
 | Value Expression | `@AD_Org_ID@` |
 
 When a new user is saved, one `AD_User_OrgAccess` record is created automatically with the user's ID and their default org.
+
+---
+
+### Example 5 — Always validate on save (no watch field)
+
+Block saving an Order whose Grand Total exceeds the Business Partner's credit limit, regardless of which field the user edited. Because there is no single "watch" field, the Column is left blank so the rule runs on every save.
+
+| Field | Value |
+|---|---|
+| Table | C_Order |
+| Column | *(blank — fires on every save)* |
+| Trigger | On save |
+| Condition | `@SQL=(SELECT bp.SO_CreditLimit FROM C_BPartner bp WHERE bp.C_BPartner_ID = @C_BPartner_ID@) < @GrandTotal@` |
+| Rule Type | VALIDATE |
+| Error Level | Error |
+
+Action:
+
+| Field | Value |
+|---|---|
+| Type | VALIDATE |
+| Expression | (evaluates to `N` — the Condition already ensures this fires only on violation) |
+| Message | Grand Total exceeds the credit limit for this Business Partner. |
+
+The Condition keeps the rule cheap: the SQL only runs when needed, and the VALIDATE action blocks the save whenever the limit is breached — no matter how the record reached that state.
 
 ---
 

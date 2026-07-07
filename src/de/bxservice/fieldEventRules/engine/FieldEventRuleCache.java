@@ -59,6 +59,8 @@ public class FieldEventRuleCache {
 
 	private static final CCache<Integer, List<MBXSFieldEventRule>> rulesByColumnId =
 			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleByColumn", 30, 0, false, 500);
+	private static final CCache<Integer, List<MBXSFieldEventRule>> columnlessRulesByTable =
+			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleColumnlessByTable", 30, 0, false, 500);
 	private static final CCache<String, List<Integer>> columnIdsByTable =
 			new CCache<>(MBXSFieldEventRule.Table_Name, "BXS_FieldEventRuleColumnsByTable", 30, 0, false, 500);
 	private static final CCache<Integer, List<MBXSFieldEventAction>> actionsByRuleId =
@@ -76,6 +78,15 @@ public class FieldEventRuleCache {
 			return list;
 		list = loadRulesByColumnId(adColumnId);
 		rulesByColumnId.put(adColumnId, list);
+		return list;
+	}
+
+	public List<MBXSFieldEventRule> getColumnlessRulesByTableId(int adTableId) {
+		List<MBXSFieldEventRule> list = columnlessRulesByTable.get(adTableId);
+		if (list != null)
+			return list;
+		list = loadColumnlessRulesByTableId(adTableId);
+		columnlessRulesByTable.put(adTableId, list);
 		return list;
 	}
 
@@ -99,6 +110,7 @@ public class FieldEventRuleCache {
 
 	public void invalidate() {
 		rulesByColumnId.reset();
+		columnlessRulesByTable.reset();
 		columnIdsByTable.reset();
 		actionsByRuleId.reset();
 		log.fine("FieldEventRuleCache invalidated");
@@ -116,6 +128,28 @@ public class FieldEventRuleCache {
 			return Collections.unmodifiableList(list);
 		} catch (Exception e) {
 			log.warning("FieldEventRuleCache: failed to load rules for AD_Column_ID=" + adColumnId + ": " + e.getMessage());
+			return Collections.emptyList();
+		}
+	}
+
+	private static List<MBXSFieldEventRule> loadColumnlessRulesByTableId(int adTableId) {
+		try {
+			List<MBXSFieldEventRule> list = new Query(Env.getCtx(),
+					MBXSFieldEventRule.Table_Name,
+					X_BXS_FieldEventRule.COLUMNNAME_AD_Table_ID + " = ?"
+					+ " AND " + X_BXS_FieldEventRule.COLUMNNAME_AD_Column_ID + " IS NULL"
+					+ " AND " + X_BXS_FieldEventRule.COLUMNNAME_TriggerEvent + " IN (?,?)"
+					+ " AND AD_Client_ID IN (0,?)", null)
+					.setOnlyActiveRecords(true)
+					.setParameters(adTableId,
+							X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel,
+							X_BXS_FieldEventRule.TRIGGEREVENT_AfterNew,
+							Env.getAD_Client_ID(Env.getCtx()))
+					.setOrderBy(X_BXS_FieldEventRule.COLUMNNAME_SeqNo)
+					.list();
+			return Collections.unmodifiableList(list);
+		} catch (Exception e) {
+			log.warning("FieldEventRuleCache: failed to load column-less rules for AD_Table_ID=" + adTableId + ": " + e.getMessage());
 			return Collections.emptyList();
 		}
 	}

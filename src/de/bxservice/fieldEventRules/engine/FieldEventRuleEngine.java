@@ -77,9 +77,20 @@ public class FieldEventRuleEngine {
 		return evaluate(adColumnId, X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel, ctx);
 	}
 
-	private FieldEventResult evaluate(int adColumnId, String triggerPath, EvaluationContext ctx) {
+	/**
+	 * Save-trigger path for rules that have no watch column (AD_Column_ID is
+	 * NULL). Unlike {@link #evaluateSaveTrigger(int, EvaluationContext)}, the
+	 * caller does not gate these on a column change — they always run on save.
+	 */
+	public FieldEventResult evaluateColumnlessSaveTrigger(List<MBXSFieldEventRule> rules, EvaluationContext ctx) {
+		return evaluateRules(rules, X_BXS_FieldEventRule.TRIGGEREVENT_OnSaveModel, ctx);
+	}
 
-		List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
+	private FieldEventResult evaluate(int adColumnId, String triggerPath, EvaluationContext ctx) {
+		return evaluateRules(FieldEventRuleCache.get().getRulesByColumnId(adColumnId), triggerPath, ctx);
+	}
+
+	private FieldEventResult evaluateRules(List<MBXSFieldEventRule> rules, String triggerPath, EvaluationContext ctx) {
 
 		FieldEventResult.Builder result = new FieldEventResult.Builder();
 
@@ -110,32 +121,38 @@ public class FieldEventRuleEngine {
 	 * across all registered columns without re-running validations or
 	 * source-record assignments (which already ran on PO_BEFORE_NEW).
 	 */
-	public void evaluateAfterNewTrigger(List<Integer> columnIds, EvaluationContext ctx) {
+	public void evaluateAfterNewTrigger(List<Integer> columnIds, List<MBXSFieldEventRule> columnlessRules,
+			EvaluationContext ctx) {
 		Map<Integer, Map<String, Object>> crossTable = new LinkedHashMap<>();
 
-		for (int adColumnId : columnIds) {
-			List<MBXSFieldEventRule> rules = FieldEventRuleCache.get().getRulesByColumnId(adColumnId);
-			for (MBXSFieldEventRule rule : rules) {
-				if (!X_BXS_FieldEventRule.TRIGGEREVENT_AfterNew.equals(rule.getTriggerEvent()))
-					continue;
-				if (X_BXS_FieldEventRule.BXS_RULETYPE_VALIDATE.equals(rule.getBXS_RuleType()))
-					continue;
-				List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
-				// Check for cross-table actions before conditionPasses — the condition can
-				// run SQL and would otherwise execute on every insert for nothing.
-				if (actions.stream().noneMatch(a -> a.getBXS_Target_Table_ID() > 0))
-					continue;
-				if (!conditionPasses(rule, ctx))
-					continue;
-				for (MBXSFieldEventAction action : actions) {
-					if (action.getBXS_Target_Table_ID() > 0)
-						collectCrossTableAction(action, rule, ctx, crossTable);
-				}
-			}
-		}
+		for (int adColumnId : columnIds)
+			collectAfterNewCrossTable(FieldEventRuleCache.get().getRulesByColumnId(adColumnId), ctx, crossTable);
+
+		collectAfterNewCrossTable(columnlessRules, ctx, crossTable);
 
 		if (ctx.getPo() != null && !crossTable.isEmpty())
 			applyCrossTableRecords(crossTable, ctx);
+	}
+
+	private void collectAfterNewCrossTable(List<MBXSFieldEventRule> rules, EvaluationContext ctx,
+			Map<Integer, Map<String, Object>> crossTable) {
+		for (MBXSFieldEventRule rule : rules) {
+			if (!X_BXS_FieldEventRule.TRIGGEREVENT_AfterNew.equals(rule.getTriggerEvent()))
+				continue;
+			if (X_BXS_FieldEventRule.BXS_RULETYPE_VALIDATE.equals(rule.getBXS_RuleType()))
+				continue;
+			List<MBXSFieldEventAction> actions = FieldEventRuleCache.get().getActionsByRuleId(rule.get_ID());
+			// Check for cross-table actions before conditionPasses — the condition can
+			// run SQL and would otherwise execute on every insert for nothing.
+			if (actions.stream().noneMatch(a -> a.getBXS_Target_Table_ID() > 0))
+				continue;
+			if (!conditionPasses(rule, ctx))
+				continue;
+			for (MBXSFieldEventAction action : actions) {
+				if (action.getBXS_Target_Table_ID() > 0)
+					collectCrossTableAction(action, rule, ctx, crossTable);
+			}
+		}
 	}
 
 	private static boolean matchesTrigger(String ruleEvent, String triggerPath) {
