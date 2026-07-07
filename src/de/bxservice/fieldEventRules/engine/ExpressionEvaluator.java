@@ -82,8 +82,11 @@ public class ExpressionEvaluator {
 			String substituted = substituteTokensForSQL(trimmed, ctx);
 			String sql = substituted.substring(SQL_PREFIX.length());
 			assertSafeSql(sql);
+			// Run inside the source record's transaction so the query can see
+			// uncommitted data (e.g. the row just inserted on PO_AFTER_NEW).
+			String trxName = ctx.getPo() != null ? ctx.getPo().get_TrxName() : null;
 			try {
-				List<List<Object>> rows = DB.getSQLArrayObjectsEx(null, sql);
+				List<List<Object>> rows = DB.getSQLArrayObjectsEx(trxName, sql);
 				if (rows == null || rows.isEmpty())
 					return null;
 				if (rows.size() > 1)

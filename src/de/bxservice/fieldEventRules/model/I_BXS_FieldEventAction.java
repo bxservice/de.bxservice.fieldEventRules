@@ -79,9 +79,6 @@ public interface I_BXS_FieldEventAction
 	  * Table to create a new related record in (cross-table actions)
 	  */
 	public int getBXS_Target_Table_ID();
-	
-
-
 
     /** Column name AD_Org_ID */
     public static final String COLUMNNAME_AD_Org_ID = "AD_Org_ID";

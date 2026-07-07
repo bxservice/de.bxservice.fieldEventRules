@@ -142,21 +142,15 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 		if (po == null) return;
 
 		String topic = event.getTopic();
-		boolean isAfterNew = IEventTopics.PO_AFTER_NEW.equals(topic);
 
-		EvaluationContext evalCtx = buildContext(po, isAfterNew);
+		EvaluationContext evalCtx = buildContext(po);
 		List<Integer> columnIds = resolveActiveColumnIds(po.get_TableName());
 		FieldEventRuleEngine engine = new FieldEventRuleEngine();
 
-		if (isAfterNew) {
+		if (IEventTopics.PO_AFTER_NEW.equals(topic)) {
 			// Cross-table-only path: skip validations and source-record assignments
-			// that already ran on PO_BEFORE_NEW.
-			FieldEventResult result = engine.evaluateAfterNewTrigger(columnIds, evalCtx);
-			result.getMessages().stream()
-					.filter(m -> "W".equals(m.getLevel()))
-					.map(ValidationMessage::getMessage)
-					.findFirst()
-					.ifPresent(msg -> log.saveWarning(msg, ""));
+			// that already ran on PO_BEFORE_NEW. Errors propagate and roll back.
+			engine.evaluateAfterNewTrigger(columnIds, evalCtx);
 			return;
 		}
 
@@ -196,14 +190,13 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 				.ifPresent(msg -> { throw new AdempiereException(msg); });
 	}
 
-	static EvaluationContext buildContext(PO po, boolean isAfterNew) {
+	static EvaluationContext buildContext(PO po) {
 		return EvaluationContext.builder()
 				.ctx(po.getCtx())
 				.po(po)
 				.gridTab(null)
 				.currentValues(extractCurrentValues(po))
 				.resolvedParams(Collections.emptyMap())
-				.afterNew(isAfterNew)
 				.build();
 	}
 
