@@ -34,7 +34,6 @@ import org.compiere.model.MMessage;
 import org.compiere.model.MTable;
 import org.compiere.model.PO;
 import org.compiere.util.CLogger;
-import org.compiere.util.DB;
 import org.compiere.util.Env;
 import org.compiere.util.Evaluatee;
 import org.compiere.util.Msg;
@@ -177,8 +176,11 @@ public class FieldEventRuleEngine {
 			return evaluateSQLCondition(condition, ctx);
 
 		} catch (Exception e) {
-			log.warning("Rule '" + rule.getName() + "': condition evaluation failed — " + e.getMessage());
-			return false;
+			// Do not swallow: a rule whose condition cannot be evaluated is misconfigured, and
+			// silently skipping it would let a VALIDATE rule never fire. The caller (model
+			// validator or callout) surfaces the message; core rolls the transaction back.
+			throw new AdempiereException(
+					"Rule '" + rule.getName() + "': condition evaluation failed — " + e.getMessage(), e);
 		}
 	}
 
@@ -190,19 +192,8 @@ public class FieldEventRuleEngine {
 
 		String fragment = condition.substring(SQL_PREFIX.length());
 
-		PO po = ctx.getPo();
-		if (po != null) {
-			String parsedFragment = Env.parseVariable(fragment, po, null, false);
-			String sql = "SELECT 1 FROM dual "
-					+ " WHERE (" + parsedFragment + ")";
-			return DB.getSQLValueEx(po.get_TrxName(), sql) > 0;
-		}
-
-		// UI callout path: no persisted record, fall back to inline token substitution.
-		// Only @Token@ references work here; bare column names are not supported.
-		String wrapped = SQL_PREFIX + "SELECT CASE WHEN (" + fragment + ") THEN 'Y' ELSE 'N' END"
-				+ " FROM (SELECT 1) AS T";
-		Object result = evaluator.evaluate(wrapped, ctx);
+		Object result = evaluator.evaluateSqlQuery(
+				"SELECT CASE WHEN (" + fragment + ") THEN 'Y' ELSE 'N' END FROM dual", ctx);
 		return "Y".equals(String.valueOf(result));
 	}
 

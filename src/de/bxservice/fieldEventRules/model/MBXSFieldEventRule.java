@@ -75,15 +75,10 @@ public class MBXSFieldEventRule extends X_BXS_FieldEventRule {
 
 		if (getAD_Field_ID() > 0) {
 			MField field = MField.get(getAD_Field_ID());
-			if (field != null) {
+			if (field != null)
 				setAD_Column_ID(field.getAD_Column_ID());
-
-				if (field.getAD_Column_ID() != getAD_Column_ID())
-					throw new AdempiereException(
-							Msg.getElement(getCtx(), COLUMNNAME_AD_Field_ID) + " / "
-							+ Msg.getElement(getCtx(), COLUMNNAME_AD_Column_ID)
-							+ " mismatch");
-			}
+		} else if (is_ValueChanged(COLUMNNAME_AD_Field_ID)) {
+			setAD_Column_ID(0);
 		}
 
 		if (getAD_Column_ID() > 0 && getAD_Table_ID() == 0) {

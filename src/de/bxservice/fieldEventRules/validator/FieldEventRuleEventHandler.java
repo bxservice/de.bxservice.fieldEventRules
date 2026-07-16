@@ -165,15 +165,9 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 				if (!po.is_ValueChanged(columnName))
 					continue;
 			}
-			FieldEventResult result;
-			try {
-				result = engine.evaluateSaveTrigger(adColumnId, evalCtx);
-			} catch (Exception e) {
-				log.warning("FieldEventRule save evaluation failed for AD_Column_ID="
-						+ adColumnId + " table=" + po.get_TableName()
-						+ ": " + e.getMessage());
-				continue;
-			}
+			// A misconfigured rule (e.g. a condition whose SQL fails) propagates and rolls
+			// back rather than being skipped — otherwise a VALIDATE rule silently never fires.
+			FieldEventResult result = engine.evaluateSaveTrigger(adColumnId, evalCtx);
 			applyAssignments(result, po, evalCtx);
 			combined = merge(combined, result);
 			if (combined.hasBlockingError()) break;
@@ -182,14 +176,9 @@ public class FieldEventRuleEventHandler extends AbstractEventHandler {
 		// Column-less rules have no watch field, so they always run on save
 		// (insert and update), regardless of which columns changed.
 		if (!columnlessRules.isEmpty() && !combined.hasBlockingError()) {
-			try {
-				FieldEventResult result = engine.evaluateColumnlessSaveTrigger(columnlessRules, evalCtx);
-				applyAssignments(result, po, evalCtx);
-				combined = merge(combined, result);
-			} catch (Exception e) {
-				log.warning("FieldEventRule column-less save evaluation failed for table="
-						+ po.get_TableName() + ": " + e.getMessage());
-			}
+			FieldEventResult result = engine.evaluateColumnlessSaveTrigger(columnlessRules, evalCtx);
+			applyAssignments(result, po, evalCtx);
+			combined = merge(combined, result);
 		}
 
 		combined.getMessages().stream()

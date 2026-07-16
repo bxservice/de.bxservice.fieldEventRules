@@ -57,9 +57,12 @@ public class FieldEventRuleCallout implements IColumnCallout {
 		try {
 			result = engine.evaluateUITrigger(adColumnId, evalCtx);
 		} catch (Exception e) {
-			log.warning("FieldEventRule evaluation failed for AD_Column_ID="
+			// A misconfigured rule (e.g. a condition whose SQL fails) is reported to the user
+			// instead of being skipped, matching the save path. A non-empty return is the
+			// IColumnCallout way to raise an error; there is no transaction to roll back here.
+			log.severe("FieldEventRule evaluation failed for AD_Column_ID="
 					+ adColumnId + ": " + e.getMessage());
-			return "";
+			return e.getMessage();
 		}
 
 		applyResult(result, mTab);

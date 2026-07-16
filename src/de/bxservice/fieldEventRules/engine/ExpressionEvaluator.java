@@ -78,30 +78,8 @@ public class ExpressionEvaluator {
 		String trimmed = expression.trim();
 
 		// SQL expression — tokens substituted as SQL literals, then query executed
-		if (trimmed.startsWith(SQL_PREFIX)) {
-			String substituted = substituteTokensForSQL(trimmed, ctx);
-			String sql = substituted.substring(SQL_PREFIX.length());
-			assertSafeSql(sql);
-			// Run inside the source record's transaction so the query can see
-			// uncommitted data (e.g. the row just inserted on PO_AFTER_NEW).
-			String trxName = ctx.getPo() != null ? ctx.getPo().get_TrxName() : null;
-			try {
-				List<List<Object>> rows = DB.getSQLArrayObjectsEx(trxName, sql);
-				if (rows == null || rows.isEmpty())
-					return null;
-				if (rows.size() > 1)
-					throw new AdempiereException(
-							"SQL expression for assignment returned " + rows.size()
-							+ " rows; must return exactly one: " + sql);
-				List<Object> firstRow = rows.get(0);
-				return (firstRow != null && !firstRow.isEmpty()) ? firstRow.get(0) : null;
-			} catch (AdempiereException e) {
-				throw e;
-			} catch (Exception e) {
-				throw new AdempiereException(
-						"SQL expression execution failed [" + sql + "]", e);
-			}
-		}
+		if (trimmed.startsWith(SQL_PREFIX))
+			return evaluateSqlQuery(trimmed.substring(SQL_PREFIX.length()), ctx);
 
 		// String literal — strip the outer single quotes
 		if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length() >= 2)
@@ -120,18 +98,52 @@ public class ExpressionEvaluator {
 	// SQL path
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Substitutes the {@code @Token@} references in {@code rawSql} as SQL literals
+	 * and executes the result as a scalar query.
+	 *
+	 * @param rawSql SQL without the {@code @SQL=} prefix
+	 * @return the single value returned by the query, or {@code null} if no row
+	 */
+	Object evaluateSqlQuery(String rawSql, EvaluationContext ctx) throws AdempiereException {
+		String sql = substituteTokensForSQL(rawSql, ctx);
+		assertSafeSql(sql);
+		// Run inside the source record's transaction so the query can see
+		// uncommitted data (e.g. the row just inserted on PO_AFTER_NEW).
+		String trxName = ctx.getPo() != null ? ctx.getPo().get_TrxName() : null;
+		try {
+			List<List<Object>> rows = DB.getSQLArrayObjectsEx(trxName, sql);
+			if (rows == null || rows.isEmpty())
+				return null;
+			if (rows.size() > 1)
+				throw new AdempiereException(
+						"SQL expression for assignment returned " + rows.size()
+						+ " rows; must return exactly one: " + sql);
+			List<Object> firstRow = rows.get(0);
+			return (firstRow != null && !firstRow.isEmpty()) ? firstRow.get(0) : null;
+		} catch (AdempiereException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new AdempiereException(
+					"SQL expression execution failed [" + sql + "]", e);
+		}
+	}
+
 	private static String substituteTokensForSQL(String expression, EvaluationContext ctx) {
 		Matcher m = TOKEN_PATTERN.matcher(expression);
 		StringBuffer sb = new StringBuffer();
 		while (m.find()) {
 			String token = m.group(1);
+			// A token the author already wrapped in quotes ('@Name@') keeps those quotes;
+			// only the value is escaped, otherwise it would end up quoted twice.
+			boolean quoted = isQuotedToken(expression, m.start(), m.end());
 			Object value = resolveTokenRaw(token, ctx);
 			String rep;
 			if (value == null) {
 				log.warning("Token @" + token + "@ could not be resolved; substituting NULL");
-				rep = "NULL";
+				rep = quoted ? "" : "NULL";
 			} else {
-				rep = formatForSQL(value);
+				rep = quoted ? escapeSQL(toSQLString(value)) : formatForSQL(value);
 			}
 			m.appendReplacement(sb, Matcher.quoteReplacement(rep));
 		}
@@ -139,16 +151,30 @@ public class ExpressionEvaluator {
 		return sb.toString();
 	}
 
+	/** True when the matched token is immediately surrounded by single quotes. */
+	private static boolean isQuotedToken(String expression, int start, int end) {
+		return start > 0 && end < expression.length()
+				&& expression.charAt(start - 1) == '\'' && expression.charAt(end) == '\'';
+	}
+
 	private static String formatForSQL(Object value) {
 		if (value instanceof Number)
 			return value.toString();
 		if (value instanceof Timestamp)
 			return DB.TO_DATE((Timestamp) value, false);
+		return "'" + escapeSQL(toSQLString(value)) + "'";
+	}
+
+	/** String form of a value as SQL expects it, without quotes. */
+	private static String toSQLString(Object value) {
 		// PO/GridField store YesNo columns as Boolean; SQL expects the 'Y'/'N' literal.
 		if (value instanceof Boolean)
-			return ((Boolean) value) ? "'Y'" : "'N'";
-		String s = value.toString();
-		return "'" + s.replace("'", "''") + "'";
+			return ((Boolean) value) ? "Y" : "N";
+		return value.toString();
+	}
+
+	private static String escapeSQL(String value) {
+		return value.replace("'", "''");
 	}
 
 	// -------------------------------------------------------------------------

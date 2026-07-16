@@ -37,7 +37,9 @@ A Field Event Rule sits between a field (or column) and a piece of logic you def
 An optional guard expression. If it evaluates to false, the rule is skipped entirely. Useful for rules that only apply in certain situations (e.g. only on Sales Orders, only when the amount exceeds a threshold).
 
 **3. Actions** — what happens?
-One or more ordered steps. Each action sets a field to a computed value, clears it, or validates it.
+One or more ordered steps. Each action sets a field to a computed value or clears it.
+
+Validation is not an action — it is a property of the rule itself. A rule whose Rule Type is VALIDATE shows a message instead of running actions; see [Validation rules in detail](#validation-rules-in-detail).
 
 ---
 
@@ -54,8 +56,10 @@ Each rule record has:
 | Table / Column | Attach the rule at the column level so it fires for any window using that column. Column is optional for the *On save* and *After New* triggers — leave it blank to fire on every save (see [Firing on every save](#firing-on-every-save-no-watch-field)). |
 | Trigger | On field change / On save / UI & Save / After New |
 | Execution scope | UI only / Model only / Both |
-| Condition | Optional guard (see Conditions below) |
+| Condition | Optional guard (see Conditions below). For VALIDATE rules this is the validation test itself. |
 | Rule type | SET (data consequence) or VALIDATE |
+| Message | VALIDATE only — the message shown when the rule fires. Falls back to the rule's Name if left blank. |
+| Error Level | VALIDATE only — Error (blocks) or Warning (acknowledge and continue). Defaults to Error. |
 | Active | Enable or disable without deleting |
 | Sequence | Controls execution order when multiple rules exist on the same field |
 
@@ -127,13 +131,21 @@ Starts with `@SQL=` followed by a SQL fragment. The fragment is evaluated as a c
 )
 ```
 
+```
+@SQL=@DocumentNo@ NOT SIMILAR TO '[A-Za-z0-9]{1,}'
+```
+
+Do **not** put quotes around a token — the engine already substitutes text values as quoted SQL literals (see [Variable substitution](#variable-substitution-in-expressions)). The example above becomes `'LS80003' NOT SIMILAR TO '[A-Za-z0-9]{1,}'`.
+
 If the Condition is left blank, the rule always fires (subject to Trigger and Active).
 
 ---
 
 ## Actions
 
-Each rule has one or more actions, executed in sequence order. An action either sets a value on a field or validates a condition.
+Each rule has one or more actions, executed in sequence order. An action either sets a value on a field or clears it.
+
+Actions apply to SET rules only. A VALIDATE rule does not run actions — its Condition is the test and its Message is the output.
 
 ### Action types
 
@@ -142,8 +154,6 @@ Each rule has one or more actions, executed in sequence order. An action either 
 **SET IF BLANK** — writes the computed value only if the target column is currently empty. Useful for defaults that should not override intentional entries.
 
 **CLEAR** — sets the target column to null. No expression needed.
-
-**VALIDATE** — evaluates an expression; if the result is not true, shows a message to the user. Does not set any value.
 
 ### Value expressions
 
@@ -183,7 +193,28 @@ Use `@ColumnName@` to reference any value from the current record. The engine re
 
 If a variable cannot be resolved, it is substituted with `NULL` and a warning is logged. The rule continues rather than failing hard.
 
-> **SQL validation on save** — when you save a rule configuration, the system performs a dry run to detect malformed SQL before the rule can affect real data. Fix any reported syntax errors before the rule will activate.
+#### Quoting inside `@SQL=`
+
+The engine substitutes each token as a ready-to-use SQL literal, so **you do not write the quotes yourself**:
+
+| Token | Value | Becomes |
+|---|---|---|
+| `@DocumentNo@` | `LS80003` | `'LS80003'` |
+| `@Description@` | `O'Brien` | `'O''Brien'` (apostrophes escaped) |
+| `@GrandTotal@` | `123.45` | `123.45` (numbers unquoted) |
+| `@IsSOTrx@` | checked | `'Y'` |
+| `@DateOrdered@` | a date | a SQL date literal |
+| `@AnyColumn@` | empty | `NULL` |
+
+If you do wrap a token in quotes, the engine leaves your quotes alone and only escapes the value, so `Name = '@Name@'` still works. This detection needs the quotes to touch the token exactly — `'%@Name@%'` is **not** recognized and produces broken SQL. For `LIKE` patterns, concatenate instead:
+
+```
+@SQL=@Description@ LIKE '%' || @Name@ || '%'
+```
+
+Inside `@SQL=`, the dotted `@Table.ColumnName@` form does **not** resolve (it yields `NULL`) — join to the related table in the SQL instead. The `@ColumnName@`, `@#Variable@` and `@$Variable@` forms all work.
+
+> **SQL validation on save** — when you save a rule configuration, the system performs a dry run to detect malformed SQL before the rule can affect real data. Fix any reported syntax errors before the rule will activate. The dry run replaces every token with `NULL`, so it catches structural errors only; a type mismatch that depends on the actual value surfaces when the rule runs, and aborts the save with the rule name in the message.
 
 ---
 
@@ -221,7 +252,7 @@ Action 2 — write credit status into PO Reference:
 
 ### Example 2 — Validate credit limit on Business Partner change
 
-Warn the user immediately when the order's Grand Total already exceeds the selected Business Partner's credit limit. The Condition pre-checks the limit so the VALIDATE action only fires when there is actually a problem.
+Warn the user immediately when the order's Grand Total already exceeds the selected Business Partner's credit limit. The Condition describes the violation, so the rule fires only when there is actually a problem.
 
 | Field | Value |
 |---|---|
@@ -231,14 +262,10 @@ Warn the user immediately when the order's Grand Total already exceeds the selec
 | Trigger | On field change (UI) |
 | Condition | `@SQL=(SELECT bp.SO_CreditLimit FROM C_BPartner bp WHERE bp.C_BPartner_ID = @C_BPartner_ID@) < @GrandTotal@` |
 | Rule Type | VALIDATE |
-
-Action:
-
-| Field | Value |
-|---|---|
-| Type | VALIDATE |
-| Expression | (evaluates to `N` — the Condition already ensures this fires only on violation) |
 | Message | Grand Total exceeds the credit limit for this Business Partner. |
+| Error Level | Error |
+
+No actions are needed. When the Condition is true — the limit is breached — the rule shows its Message.
 
 ---
 
@@ -333,17 +360,10 @@ Block saving an Order whose Grand Total exceeds the Business Partner's credit li
 | Trigger | On save |
 | Condition | `@SQL=(SELECT bp.SO_CreditLimit FROM C_BPartner bp WHERE bp.C_BPartner_ID = @C_BPartner_ID@) < @GrandTotal@` |
 | Rule Type | VALIDATE |
+| Message | Grand Total exceeds the credit limit for this Business Partner. |
 | Error Level | Error |
 
-Action:
-
-| Field | Value |
-|---|---|
-| Type | VALIDATE |
-| Expression | (evaluates to `N` — the Condition already ensures this fires only on violation) |
-| Message | Grand Total exceeds the credit limit for this Business Partner. |
-
-The Condition keeps the rule cheap: the SQL only runs when needed, and the VALIDATE action blocks the save whenever the limit is breached — no matter how the record reached that state.
+No actions are needed. The Condition is the whole test: it blocks the save whenever the limit is breached — no matter how the record reached that state.
 
 ---
 
@@ -351,17 +371,19 @@ The Condition keeps the rule cheap: the SQL only runs when needed, and the VALID
 
 You can define several rules on the same field or column. They execute in Sequence Number order. Each rule sees the values already written by the previous ones, so a later rule can depend on what an earlier rule set.
 
-If a rule has **Stop on Error** enabled and produces a blocking validation error, execution stops and the remaining rules are skipped.
-
-System-level rules (configured in the System tenant) always execute before tenant-level rules. Tenant rules can build on top of or further refine the results of system rules.
+System-level rules (configured in the System tenant) and tenant-level rules are loaded together and execute in a single Sequence Number order — system rules do **not** automatically run first. A tenant rule with Sequence 10 runs before a system rule with Sequence 20. Use Sequence Number to control precedence explicitly.
 
 ---
 
 ## Validation rules in detail
 
-When Rule Type is VALIDATE, the action expression must evaluate to `'Y'` (case-insensitive) for the validation to pass. Any other result (including `NULL`) is treated as a failure.
+When Rule Type is VALIDATE, the rule's **Condition** is the test. If the Condition evaluates to true, the rule fires and shows its Message at the configured Error Level. No expression is evaluated and no value is set — a VALIDATE rule's actions, if any, are ignored.
 
-**Error level** controls what happens on failure:
+> **Write the Condition to describe the violation, not the valid state.** The message appears when the Condition is *true*. A rule with a blank Condition fires its message on every trigger.
+
+The message text comes from the rule's **Message** (AD_Message). If no Message is set, the rule's **Name** is used instead.
+
+**Error level** controls what happens when the rule fires. If left blank, it defaults to **Error**:
 
 - **Error** — blocks the operation. On field change (UI), a popup is shown and the field is flagged. On save (model), an exception is thrown and the record cannot be saved until the condition is satisfied.
 - **Warning** — allows the operation to proceed, but shows a message the user must acknowledge before continuing.
