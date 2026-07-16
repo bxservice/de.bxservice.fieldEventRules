@@ -184,12 +184,17 @@ CASE WHEN @IsSOTrx@ = 'Y' THEN @PriceList@ ELSE @PriceStd@ END
 
 Use `@ColumnName@` to reference any value from the current record. The engine resolves these before executing the SQL.
 
+Tokens use iDempiere's standard syntax and behave exactly as they do in display logic — the same forms and the same operators work in Conditions, in value expressions, and inside `@SQL=`, on both the callout and the save path.
+
 | Syntax | Resolves to |
 |---|---|
 | `@ColumnName@` | Current value of that column in the record |
-| `@Table.ColumnName@` | Value of a column on a related table, resolved via the current record's foreign key (e.g. `@C_BPartner.Description@` reads the Description from the linked Business Partner) |
+| `@C_BPartner_ID.Description@` | Reference operator: a column on the referenced record, reached through the foreign key (here, the Description of the linked Business Partner). The part before the dot must be the `_ID` column |
+| `@C_Location_ID:0@` | Default-value operator: the literal after the colon is used when the value is empty |
 | `@#Variable@` | Global system context (e.g. `@#AD_Client_ID@`) |
 | `@$Variable@` | Window-level context |
+
+The default fires only when the value is null or empty — not when it is `0`. A number-like default is substituted as a number (`@C_Location_ID:0@` becomes `0`, not `'0'`), so on a text column use a non-numeric default.
 
 If a variable cannot be resolved, it is substituted with `NULL` and a warning is logged. The rule continues rather than failing hard.
 
@@ -212,7 +217,9 @@ If you do wrap a token in quotes, the engine leaves your quotes alone and only e
 @SQL=@Description@ LIKE '%' || @Name@ || '%'
 ```
 
-Inside `@SQL=`, the dotted `@Table.ColumnName@` form does **not** resolve (it yields `NULL`) — join to the related table in the SQL instead. The `@ColumnName@`, `@#Variable@` and `@$Variable@` forms all work.
+A token resolved through the reference operator or a default is quoted by the same rules — `@C_BPartner_ID.Name@` becomes a quoted text literal, `@C_Location_ID:0@` an unquoted `0`.
+
+> **Breaking change** — the reference operator now uses the `_ID` column, matching core: write `@C_BPartner_ID.Name@` where an older rule said `@C_BPartner.Name@`. The old form is rejected with an error naming the token, rather than silently resolving to `NULL`.
 
 > **SQL validation on save** — when you save a rule configuration, the system performs a dry run to detect malformed SQL before the rule can affect real data. Fix any reported syntax errors before the rule will activate. The dry run replaces every token with `NULL`, so it catches structural errors only; a type mismatch that depends on the actual value surfaces when the rule runs, and aborts the save with the rule name in the message.
 
@@ -238,7 +245,7 @@ Action 1 — copy the partner description:
 |---|---|
 | Type | SET |
 | Target | `Description` |
-| Expression | `@C_BPartner.Description@` |
+| Expression | `@C_BPartner_ID.Description@` |
 
 Action 2 — write credit status into PO Reference:
 

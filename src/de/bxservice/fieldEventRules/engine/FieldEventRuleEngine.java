@@ -294,22 +294,7 @@ public class FieldEventRuleEngine {
 	}
 
 	private static Evaluatee evaluateeFor(EvaluationContext ctx) {
-		return variableName -> toLogicValue(resolveRawValue(variableName, ctx));
-	}
-
-	/**
-	 * Resolves the raw (untyped) value of a column from the PO or, on the UI
-	 * callout path (no PO available), from the current values map.
-	 */
-	private static Object resolveRawValue(String variableName, EvaluationContext ctx) {
-		if (ctx.getCurrentValues().containsKey(variableName))
-			return ctx.getCurrentValues().get(variableName);
-		PO po = ctx.getPo();
-		if (po != null) {
-			int idx = po.get_ColumnIndex(variableName);
-			return idx >= 0 ? po.get_Value(idx) : null;
-		}
-		return null;
+		return variableName -> toLogicValue(ExpressionEvaluator.resolveToken(variableName, ctx));
 	}
 
 	/**

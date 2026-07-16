@@ -33,11 +33,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.adempiere.exceptions.AdempiereException;
+import org.compiere.model.MColumn;
 import org.compiere.model.MTable;
 import org.compiere.model.PO;
 import org.compiere.util.CLogger;
 import org.compiere.util.DB;
 import org.compiere.util.Env;
+import org.compiere.util.Evaluator;
 
 /**
  * Resolves a {@code ValueExpression} string against an {@link EvaluationContext}.
@@ -46,8 +48,9 @@ import org.compiere.util.Env;
  * <ol>
  *   <li>{@code @SQL=<query>} — token-substituted and executed as a scalar SQL query.
  *   <li>{@code 'literal'} — single-quoted string literal; quotes are stripped.
- *   <li>{@code @Token@} — single token resolved directly from the PO / current values.
- *       Dotted form {@code @Table.Column@} navigates the foreign-key chain (like Kanban).
+ *   <li>{@code @Token@} — single token resolved from the PO / current values, supporting
+ *       core's reference operator {@code @C_BPartner_ID.Name@} and default-value operator
+ *       {@code @C_Location_ID:0@} (see {@link #resolveToken}).
  *   <li>Arithmetic expression — tokens are resolved and substituted as numeric strings,
  *       then the result is evaluated by a pure-Java arithmetic parser (no SQL round-trip).
  * </ol>
@@ -85,10 +88,10 @@ public class ExpressionEvaluator {
 		if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length() >= 2)
 			return trimmed.substring(1, trimmed.length() - 1).replace("''", "'");
 
-		// Single token — resolve directly from PO/context (supports dotted notation)
+		// Single token — resolve from PO/context
 		Matcher m = SINGLE_TOKEN_PATTERN.matcher(trimmed);
 		if (m.matches())
-			return resolveTokenDirect(m.group(1), ctx);
+			return resolveToken(m.group(1), ctx);
 
 		// Arithmetic / multi-token — substitute as raw strings and parse in Java
 		return evaluateArithmeticExpression(trimmed, ctx);
@@ -137,7 +140,7 @@ public class ExpressionEvaluator {
 			// A token the author already wrapped in quotes ('@Name@') keeps those quotes;
 			// only the value is escaped, otherwise it would end up quoted twice.
 			boolean quoted = isQuotedToken(expression, m.start(), m.end());
-			Object value = resolveTokenRaw(token, ctx);
+			Object value = resolveToken(token, ctx);
 			String rep;
 			if (value == null) {
 				log.warning("Token @" + token + "@ could not be resolved; substituting NULL");
@@ -178,63 +181,60 @@ public class ExpressionEvaluator {
 	}
 
 	// -------------------------------------------------------------------------
-	// Non-SQL token resolution (like Kanban Board's parseVariable)
+	// Token resolution — the single resolver behind every path
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Resolves {@code token} directly from the PO or context values without SQL.
-	 * Supports dotted notation: {@code C_BPartner.Name} navigates via the FK column
-	 * {@code C_BPartner_ID}, loads the referenced PO, and returns the sub-column value.
+	 * Resolves {@code token} to its typed value, honouring core's operators with core's
+	 * semantics (see {@code DefaultEvaluatee.get_ValueAsString}):
+	 * <ul>
+	 *   <li>{@code @C_BPartner_ID.Name@} — reference operator: loads the referenced record
+	 *       and returns the value of its {@code Name} column.
+	 *   <li>{@code @C_Location_ID:0@} — default-value operator (IDEMPIERE-194): falls back to
+	 *       the literal after the colon when the value is empty.
+	 * </ul>
+	 * Core resolves the reference operator before the default, so a default sits on the base
+	 * ({@code @C_BPartner_ID:0.Name@}); the order here is the same.
+	 *
+	 * <p>Unlike core's evaluatee this returns the <b>typed</b> value rather than a String,
+	 * which is what lets the SQL path quote by type and lets assignments reach typed columns.
 	 */
-	private static Object resolveTokenDirect(String token, EvaluationContext ctx) {
-		if (token.startsWith("$")) {
-			String raw = Env.getContext(ctx.getCtx(), token);
-			return raw.isEmpty() ? null : raw;
+	static Object resolveToken(String token, EvaluationContext ctx) {
+
+		String foreignColumn = null;
+		int f = token.indexOf(Evaluator.VARIABLE_REFERENCE_OPERATOR);
+		if (f > 0 && token.substring(0, f).matches(".*[_]ID([:].+)?")) {
+			foreignColumn = token.substring(f + 1);
+			token = token.substring(0, f);
+		} else if (f > 0 && !Env.isGlobalVariable(token)) {
+			// Not <FK>_ID.Column: either the old @C_BPartner.Name@ form or a typo. It would
+			// resolve to NULL and silently disable the rule, so say so instead. Global
+			// variables (@$sysconfig.Foo@) legitimately carry a dot and are left alone.
+			throw new AdempiereException("Token @" + token + "@: the reference operator needs an _ID"
+					+ " column, e.g. @C_BPartner_ID.Name@");
 		}
 
-		int dotIdx = token.indexOf('.');
-		if (dotIdx > 0) {
-			String fkBase = token.substring(0, dotIdx);
-			String subCol = token.substring(dotIdx + 1);
-			return resolveViaForeignKey(fkBase + "_ID", fkBase, subCol, ctx);
+		String defaultValue = null;
+		int idx = token.indexOf(Evaluator.VARIABLE_DEFAULT_VALUE_OPERATOR);
+		if (idx > 0) {
+			defaultValue = token.substring(idx + 1);
+			token = token.substring(0, idx);
 		}
 
-		return resolveTokenRaw(token, ctx);
+		Object value = lookupToken(token, ctx);
+		if (isEmpty(value) && defaultValue != null)
+			value = defaultValueOf(defaultValue);
+		if (foreignColumn != null && !isEmpty(value))
+			value = resolveViaForeignKey(token, value, foreignColumn, ctx);
+		return value;
 	}
 
 	/**
-	 * Loads the PO referenced by {@code fkCol} and returns the value of {@code subCol} on it.
-	 * Works for both the PO context (model validator) and the UI context (callout).
-	 */
-	private static Object resolveViaForeignKey(
-			String fkCol, String tableName, String subCol, EvaluationContext ctx) {
-
-		PO po = ctx.getPo();
-		if (po != null && po.get_ColumnIndex(fkCol) >= 0) {
-			Integer id = (Integer) po.get_Value(fkCol);
-			if (id != null && id > 0) {
-				PO subPo = MTable.get(ctx.getCtx(), tableName).getPO(id, po.get_TrxName());
-				if (subPo != null)
-					return subPo.get_Value(subCol);
-			}
-			return null;
-		}
-
-		// UI callout path: FK id lives in currentValues
-		Object idObj = ctx.getCurrentValues().get(fkCol);
-		if (idObj instanceof Integer && (Integer) idObj > 0) {
-			PO subPo = MTable.get(ctx.getCtx(), tableName).getPO((Integer) idObj, null);
-			if (subPo != null)
-				return subPo.get_Value(subCol);
-		}
-		return null;
-	}
-
-	/**
-	 * Resolves a plain (non-dotted, non-{@code $}) token from the lookup chain:
+	 * Resolves a plain token from the lookup chain:
 	 * resolvedParams → currentValues → PO column → Env context.
+	 * The Env fallback covers core's {@code #}, {@code $} and {@code +} global prefixes.
 	 */
-	private static Object resolveTokenRaw(String token, EvaluationContext ctx) {
+	private static Object lookupToken(String token, EvaluationContext ctx) {
 		Map<String, Object> params = ctx.getResolvedParams();
 		if (params.containsKey(token)) return params.get(token);
 
@@ -251,6 +251,81 @@ public class ExpressionEvaluator {
 		return raw.isEmpty() ? null : raw;
 	}
 
+	/**
+	 * Loads the record referenced by {@code fkColumn} = {@code idValue} and returns the typed
+	 * value of {@code foreignColumn} on it, or null when the reference is not set.
+	 */
+	private static Object resolveViaForeignKey(
+			String fkColumn, Object idValue, String foreignColumn, EvaluationContext ctx) {
+
+		int id = intValueOf(idValue);
+		if (id <= 0)
+			return null;
+
+		String foreignTable = foreignTableName(fkColumn, ctx);
+		if (foreignTable == null)
+			throw new AdempiereException("Token @" + fkColumn + "." + foreignColumn
+					+ "@: " + fkColumn + " does not reference a table.");
+
+		MTable table = MTable.get(ctx.getCtx(), foreignTable);
+		PO foreignPo = table != null
+				? table.getPO(id, ctx.getPo() != null ? ctx.getPo().get_TrxName() : null) : null;
+		if (foreignPo == null)
+			return null;
+		if (foreignPo.get_ColumnIndex(foreignColumn) < 0)
+			throw new AdempiereException("Token @" + fkColumn + "." + foreignColumn
+					+ "@: column " + foreignColumn + " not found in " + foreignTable + ".");
+
+		return foreignPo.get_Value(foreignColumn);
+	}
+
+	/** The table {@code fkColumn} points at, from the dictionary — same fallback as core. */
+	private static String foreignTableName(String fkColumn, EvaluationContext ctx) {
+		String tableName = ctx.getPo() != null ? ctx.getPo().get_TableName()
+				: ctx.getGridTab() != null ? ctx.getGridTab().getTableName() : null;
+
+		if (tableName != null) {
+			MColumn column = MColumn.get(ctx.getCtx(), tableName, fkColumn);
+			if (column != null && column.getReferenceTableName() != null)
+				return column.getReferenceTableName();
+		}
+
+		// Same last resort as DefaultEvaluatee.getForeignTableName: strip _ID off the column name.
+		String candidate = fkColumn.substring(0,
+				fkColumn.length() - Evaluator.ID_COLUMN_SUFFIX.length());
+		return MTable.get(ctx.getCtx(), candidate) != null ? candidate : null;
+	}
+
+	private static int intValueOf(Object value) {
+		if (value instanceof Number)
+			return ((Number) value).intValue();
+		try {
+			return Integer.parseInt(value.toString().trim());
+		} catch (NumberFormatException e) {
+			return 0;
+		}
+	}
+
+	/** Mirrors core's Util.isEmpty(value) check on the string form: null or "" takes the default. */
+	private static boolean isEmpty(Object value) {
+		return value == null || value.toString().isEmpty();
+	}
+
+	/**
+	 * The literal after the colon in {@code @Name:default@}. A number-like default is returned as
+	 * a BigDecimal so it substitutes unquoted ({@code @C_Location_ID:0@} → {@code 0}, not
+	 * {@code '0'}); anything else stays a string and is quoted like any other text value.
+	 */
+	private static Object defaultValueOf(String defaultValue) {
+		if (defaultValue.isEmpty())
+			return null;
+		try {
+			return new BigDecimal(defaultValue);
+		} catch (NumberFormatException e) {
+			return defaultValue;
+		}
+	}
+
 	// -------------------------------------------------------------------------
 	// Arithmetic path
 	// -------------------------------------------------------------------------
@@ -264,7 +339,7 @@ public class ExpressionEvaluator {
 		StringBuffer sb = new StringBuffer();
 		while (m.find()) {
 			String token = m.group(1);
-			Object value = resolveTokenDirect(token, ctx);
+			Object value = resolveToken(token, ctx);
 			if (value == null) {
 				log.warning("Token @" + token + "@ could not be resolved; substituting 0");
 				value = BigDecimal.ZERO;
