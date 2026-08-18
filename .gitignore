@@ -2,8 +2,6 @@
 /bin/
 
 # Eclipse project files
-.classpath
-.project
 .settings/
 
 # Claude Code
